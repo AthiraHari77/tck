@@ -61,7 +61,7 @@ jobs:
     steps:
       # ── 1. Checkout tck_dashboard branch ────────────────────────────────────
       - name: Checkout tck_dashboard
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.DASHBOARD_PAT }}
           ref: tck_dashboard
@@ -139,7 +139,7 @@ jobs:
       # ── 3. Set up Java 17 (only when testing) ───────────────────────────────
       - name: Set up JDK 17
         if: steps.mode.outputs.should_test == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v4.7.1
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -157,7 +157,7 @@ jobs:
       # ── 5. Cache Maven ~/.m2 ────────────────────────────────────────────────
       - name: Cache Maven repository
         if: steps.mode.outputs.should_test == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v4.2.3
         with:
           path: ~/.m2/repository
           key: m2-drools-${{ steps.drools-sha.outputs.sha }}
@@ -208,43 +208,47 @@ jobs:
             echo "  Testing upstream PR #$PR (isolated)"
             echo "════════════════════════════════════════════"
 
-            # ── a) Fresh clone of upstream tck into a temp dir ──────────────
+            # ── a) Clone upstream tck and immediately fetch the PR ref ───────
+            #    We do NOT use --depth 1 here because shallow clones cannot
+            #    fetch arbitrary refs like pull/<n>/head. We use --no-tags and
+            #    a single-branch clone of master for speed, then fetch the PR.
             WORK_DIR="upstream-tck-pr-${PR}"
             rm -rf "$WORK_DIR"
-            git clone --depth 1 https://github.com/dmn-tck/tck.git "$WORK_DIR"
+            git clone --no-tags --single-branch --branch master \
+              https://github.com/dmn-tck/tck.git "$WORK_DIR"
 
             # ── b) Fetch the PR's head ref into the temp clone ───────────────
-            #    pull/<number>/head is the PR's branch tip — always available
-            #    for open PRs regardless of whether it would merge cleanly.
-            pushd "$WORK_DIR"
+            #    pull/<number>/head is always available for open PRs.
+            #    We fetch it into a local branch named pr-<N> inside the clone.
+            cd "$WORK_DIR"
             git fetch origin pull/${PR}/head:pr-${PR} || {
               echo "WARNING: Could not fetch PR #$PR — skipping"
-              popd
+              cd ..
               rm -rf "$WORK_DIR"
               continue
             }
 
-            # ── c) Checkout the PR branch (detached is fine — read-only) ────
-            #    We do NOT merge. We simply check out the PR's state so the
-            #    TestCases/ directory reflects what that PR proposes.
+            # ── c) Checkout the PR branch (detached HEAD is fine — read-only)
+            #    We do NOT merge. We simply switch the working tree to the PR's
+            #    proposed state so TestCases/ reflects what the PR adds/changes.
             git checkout pr-${PR}
-            popd
+            cd ..
 
             # ── d) Run TCK runner inside the temp clone ──────────────────────
             #    The runner reads TestCases/ from the working tree (temp clone)
             #    and writes tck_results.csv to TestResults/Drools/*/
-            pushd "$WORK_DIR/runners"
+            cd "$WORK_DIR/runners"
             mvn verify \
               --batch-mode \
               --update-snapshots \
               -Pdrools \
               -Dmaven.test.failure.ignore=true
-            popd
+            cd ../..
 
             # ── e) Copy results back, discard temp clone ─────────────────────
             RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             mkdir -p pr-results/${PR}
-            RESULT_CSV=$(find "$WORK_DIR/TestResults/Drools" -name "tck_results.csv" | head -1)
+            RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
 
             if [ -z "$RESULT_CSV" ]; then
               echo "WARNING: No tck_results.csv found for PR #$PR — skipping"
