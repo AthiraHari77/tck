@@ -308,7 +308,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pr-results/ docs/drools-dashboard.html
+          [ -d pr-results ] && git add pr-results/ || true
+          git add docs/drools-dashboard.html
           git diff --cached --quiet && echo "No changes to commit" || \
             git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
           git push origin tck_dashboard
