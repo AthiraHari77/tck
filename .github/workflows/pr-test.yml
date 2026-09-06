@@ -1,27 +1,29 @@
 name: "Test Upstream PR against Drools 999-SNAPSHOT"
 
-# Runs whenever triggered manually with an upstream PR number.
-# Fetches the PR branch from upstream, merges it, builds Drools 999-SNAPSHOT
-# from source, runs the full TCK suite, and saves results per PR.
+# Three modes:
+#   1. upstream_pr = a number  → test that specific PR, save results, regenerate dashboard
+#   2. upstream_pr = "all"     → test ALL currently open upstream PRs one by one, regenerate dashboard
+#   3. upstream_pr = blank     → skip testing, just regenerate dashboard from saved results
 
 on:
   workflow_dispatch:
     inputs:
       upstream_pr:
-        description: 'Upstream dmn-tck/tck PR number to test (e.g. 717)'
-        required: true
+        description: 'PR number to test (e.g. 717), "all" for all open PRs, or leave blank to just refresh dashboard'
+        required: false
+        default: ''
       pr_title:
-        description: 'Short PR title (for dashboard label)'
+        description: 'Short PR title label (only used when a single PR number is given)'
         required: false
         default: ''
 
 jobs:
   test-pr:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
-      # ── 1. Checkout this fork ────────────────────────────────────────────
+      # ── 1. Checkout tck_dashboard branch ────────────────────────────────
       - name: Checkout tck_dashboard branch
         uses: actions/checkout@v4
         with:
@@ -29,44 +31,39 @@ jobs:
           ref: tck_dashboard
           fetch-depth: 0
 
-      # ── 2. Merge the upstream PR branch on top ───────────────────────────
-      - name: Fetch and merge upstream PR #${{ github.event.inputs.upstream_pr }}
-        run: |
-          PR=${{ github.event.inputs.upstream_pr }}
-          git remote add upstream https://github.com/dmn-tck/tck.git || true
-          git fetch upstream pull/${PR}/head:upstream-pr-${PR}
-          git merge --no-edit upstream-pr-${PR} \
-            -m "test: merge upstream PR #${PR} for Drools verification"
-          echo "PR_NUMBER=$PR" >> "$GITHUB_ENV"
-
-      # ── 3. Set up Java 17 ────────────────────────────────────────────────
+      # ── 2. Set up Java 17 ────────────────────────────────────────────────
       - name: Set up JDK 17
+        if: ${{ github.event.inputs.upstream_pr != '' }}
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── 4. Get Drools HEAD SHA for cache key ─────────────────────────────
+      # ── 3. Get Drools HEAD SHA for cache key ─────────────────────────────
       - name: Get Drools HEAD SHA
+        if: ${{ github.event.inputs.upstream_pr != '' }}
         id: drools-sha
         run: |
           SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD | cut -f1 | cut -c1-12)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
 
-      # ── 5. Cache Maven ~/.m2 ─────────────────────────────────────────────
+      # ── 4. Cache Maven ~/.m2 ─────────────────────────────────────────────
       - name: Cache Maven repository
+        if: ${{ github.event.inputs.upstream_pr != '' }}
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-drools-${{ steps.drools-sha.outputs.sha }}
           restore-keys: m2-drools-
 
-      # ── 6. Build Drools 999-SNAPSHOT from source ─────────────────────────
+      # ── 5. Build Drools 999-SNAPSHOT from source ─────────────────────────
       - name: Clone apache/incubator-kie-drools
+        if: ${{ github.event.inputs.upstream_pr != '' }}
         run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
 
       - name: Build Drools 999-SNAPSHOT
+        if: ${{ github.event.inputs.upstream_pr != '' }}
         working-directory: drools-src
         run: |
           mvn install \
@@ -78,35 +75,83 @@ jobs:
             -T 2C \
             -q
 
-      # ── 7. Run the TCK Drools runner ─────────────────────────────────────
-      - name: Run TCK against Drools 999-SNAPSHOT
+      # ── 6. Resolve list of PRs to test ───────────────────────────────────
+      - name: Resolve PR list to test
+        if: ${{ github.event.inputs.upstream_pr != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
         run: |
-          cd runners && mvn verify \
-            --batch-mode \
-            --update-snapshots \
-            -Pdrools \
-            -Dmaven.test.failure.ignore=true
+          INPUT="${{ github.event.inputs.upstream_pr }}"
+          if [ "$INPUT" = "all" ]; then
+            echo "Mode: test ALL open upstream PRs"
+            # Fetch all open PR numbers from upstream
+            PR_LIST=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
+              | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
+            echo "Open PRs to test: $PR_LIST"
+            echo "PR_LIST=$PR_LIST" >> "$GITHUB_ENV"
+          else
+            echo "Mode: test single PR #$INPUT"
+            echo "PR_LIST=$INPUT" >> "$GITHUB_ENV"
+          fi
 
-      # ── 8. Save results per PR ───────────────────────────────────────────
-      - name: Save results for PR #${{ github.event.inputs.upstream_pr }}
+      # ── 7. Test each PR in the list ──────────────────────────────────────
+      - name: Test PRs against Drools 999-SNAPSHOT
+        if: ${{ github.event.inputs.upstream_pr != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
         run: |
-          PR=${{ github.event.inputs.upstream_pr }}
-          TITLE="${{ github.event.inputs.pr_title }}"
-          RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          git remote add upstream https://github.com/dmn-tck/tck.git || true
 
-          mkdir -p pr-results/${PR}
+          for PR in $PR_LIST; do
+            echo "════════════════════════════════════"
+            echo "Testing upstream PR #$PR"
+            echo "════════════════════════════════════"
 
-          # Copy the CSV produced by the runner
-          RESULT_CSV=$(find TestResults/Drools -name "tck_results.csv" | head -1)
-          cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
+            # Reset to clean tck_dashboard state before each PR
+            git fetch upstream master
+            git checkout tck_dashboard
+            git reset --hard origin/tck_dashboard
 
-          # Count pass/fail
-          TOTAL=$(wc -l < pr-results/${PR}/tck_results.csv | tr -d ' ')
-          PASS=$(grep -c "SUCCESS" pr-results/${PR}/tck_results.csv || true)
-          FAIL=$(grep -c 'ERROR\|FAILURE\|SKIPPED' pr-results/${PR}/tck_results.csv || true)
+            # Fetch the upstream PR branch and merge it
+            git fetch upstream pull/${PR}/head:upstream-pr-${PR} || {
+              echo "WARNING: Could not fetch PR #$PR — skipping"
+              continue
+            }
+            git merge --no-edit upstream-pr-${PR} -m "test: PR #${PR}" || {
+              echo "WARNING: Merge conflict for PR #$PR — skipping"
+              git merge --abort 2>/dev/null || true
+              continue
+            }
 
-          # Write metadata
-          cat > pr-results/${PR}/meta.json <<EOF
+            # Run the TCK runner
+            cd runners && mvn verify \
+              --batch-mode \
+              --update-snapshots \
+              -Pdrools \
+              -Dmaven.test.failure.ignore=true
+            cd ..
+
+            # Save results
+            RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            mkdir -p pr-results/${PR}
+            RESULT_CSV=$(find TestResults/Drools -name "tck_results.csv" | head -1)
+            cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
+
+            TOTAL=$(wc -l < pr-results/${PR}/tck_results.csv | tr -d ' ')
+            PASS=$(grep -c "SUCCESS" pr-results/${PR}/tck_results.csv || true)
+            FAIL=$(grep -c 'ERROR\|FAILURE\|SKIPPED' pr-results/${PR}/tck_results.csv || true)
+
+            # Fetch PR title from API
+            TITLE=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('title',''))" 2>/dev/null || echo "${{ github.event.inputs.pr_title }}")
+
+            cat > pr-results/${PR}/meta.json <<EOF
           {
             "pr_number": $PR,
             "pr_title": "$TITLE",
@@ -117,10 +162,10 @@ jobs:
             "fail": $FAIL
           }
           EOF
+            echo "PR #$PR: $PASS passed, $FAIL failed out of $TOTAL"
+          done
 
-          echo "PR #$PR: $PASS passed, $FAIL failed out of $TOTAL total"
-
-      # ── 9. Regenerate dashboard ───────────────────────────────────────────
+      # ── 8. Set up Python ─────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -129,6 +174,7 @@ jobs:
       - name: Install Python deps
         run: pip install requests
 
+      # ── 9. Regenerate dashboard (always runs) ────────────────────────────
       - name: Generate dashboard
         env:
           GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
@@ -139,12 +185,13 @@ jobs:
             --token          "$GITHUB_TOKEN" \
             --output         docs/drools-dashboard.html
 
-      # ── 10. Commit and push ───────────────────────────────────────────────
-      - name: Commit and push results + dashboard
+      # ── 10. Commit and push results + dashboard ───────────────────────────
+      - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout tck_dashboard
           git add pr-results/ docs/drools-dashboard.html
-          git diff --cached --quiet && echo "No changes" || \
-            git commit -m "results: PR #${PR_NUMBER} @ $(date -u +%Y-%m-%d)"
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "results: ${{ github.event.inputs.upstream_pr || 'dashboard refresh' }} @ $(date -u +%Y-%m-%d)"
           git push origin tck_dashboard
