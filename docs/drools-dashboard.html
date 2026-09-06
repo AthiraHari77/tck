@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BAMOE TCK Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px;
+  background: #fff; color: #1f2328; display: flex; align-items: center;
+  justify-content: center; min-height: 100vh; padding: 24px; }
+.card { max-width: 480px; text-align: center; border: 1px solid #e5e7eb;
+  border-radius: 8px; padding: 40px 32px; background: #f7f8fa; }
+.card h1 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.card p  { font-size: 13px; color: #57606a; margin-bottom: 6px; }
+code { font-size: 12px; background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px;
+  font-weight: 600; background: #dbeafe; color: #1e40af; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>BAMOE TCK Dashboard</h1>
+  <p>No PR results yet. Trigger the workflow to test an upstream PR:</p>
+  <p><code>Actions → Test Upstream PR against Drools 999-SNAPSHOT → Run workflow</code></p>
+  <p style="margin-top:12px;">Enter an upstream PR number (e.g. <code>717</code>) and run.</p>
+  <div class="badge">Awaiting first run</div>
+  <p style="margin-top:20px;font-size:11px;color:#9ca3af;">Made with IBM Bob</p>
+</div>
+</body>
+</html>

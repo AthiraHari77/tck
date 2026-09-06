@@ -1,0 +1,150 @@
+name: "Test Upstream PR against Drools 999-SNAPSHOT"
+
+# Runs whenever triggered manually with an upstream PR number.
+# Fetches the PR branch from upstream, merges it, builds Drools 999-SNAPSHOT
+# from source, runs the full TCK suite, and saves results per PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_pr:
+        description: 'Upstream dmn-tck/tck PR number to test (e.g. 717)'
+        required: true
+      pr_title:
+        description: 'Short PR title (for dashboard label)'
+        required: false
+        default: ''
+
+jobs:
+  test-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      # ── 1. Checkout this fork ────────────────────────────────────────────
+      - name: Checkout tck_dashboard branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DASHBOARD_PAT }}
+          ref: tck_dashboard
+          fetch-depth: 0
+
+      # ── 2. Merge the upstream PR branch on top ───────────────────────────
+      - name: Fetch and merge upstream PR #${{ github.event.inputs.upstream_pr }}
+        run: |
+          PR=${{ github.event.inputs.upstream_pr }}
+          git remote add upstream https://github.com/dmn-tck/tck.git || true
+          git fetch upstream pull/${PR}/head:upstream-pr-${PR}
+          git merge --no-edit upstream-pr-${PR} \
+            -m "test: merge upstream PR #${PR} for Drools verification"
+          echo "PR_NUMBER=$PR" >> "$GITHUB_ENV"
+
+      # ── 3. Set up Java 17 ────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── 4. Get Drools HEAD SHA for cache key ─────────────────────────────
+      - name: Get Drools HEAD SHA
+        id: drools-sha
+        run: |
+          SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD | cut -f1 | cut -c1-12)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
+
+      # ── 5. Cache Maven ~/.m2 ─────────────────────────────────────────────
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-drools-${{ steps.drools-sha.outputs.sha }}
+          restore-keys: m2-drools-
+
+      # ── 6. Build Drools 999-SNAPSHOT from source ─────────────────────────
+      - name: Clone apache/incubator-kie-drools
+        run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
+
+      - name: Build Drools 999-SNAPSHOT
+        working-directory: drools-src
+        run: |
+          mvn install \
+            --batch-mode \
+            -DskipTests \
+            -Dcheckstyle.skip=true \
+            -Denforcer.skip=true \
+            -Dformatter.skip=true \
+            -T 2C \
+            -q
+
+      # ── 7. Run the TCK Drools runner ─────────────────────────────────────
+      - name: Run TCK against Drools 999-SNAPSHOT
+        run: |
+          cd runners && mvn verify \
+            --batch-mode \
+            --update-snapshots \
+            -Pdrools \
+            -Dmaven.test.failure.ignore=true
+
+      # ── 8. Save results per PR ───────────────────────────────────────────
+      - name: Save results for PR #${{ github.event.inputs.upstream_pr }}
+        run: |
+          PR=${{ github.event.inputs.upstream_pr }}
+          TITLE="${{ github.event.inputs.pr_title }}"
+          RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          mkdir -p pr-results/${PR}
+
+          # Copy the CSV produced by the runner
+          RESULT_CSV=$(find TestResults/Drools -name "tck_results.csv" | head -1)
+          cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
+
+          # Count pass/fail
+          TOTAL=$(wc -l < pr-results/${PR}/tck_results.csv | tr -d ' ')
+          PASS=$(grep -c "SUCCESS" pr-results/${PR}/tck_results.csv || true)
+          FAIL=$(grep -c 'ERROR\|FAILURE\|SKIPPED' pr-results/${PR}/tck_results.csv || true)
+
+          # Write metadata
+          cat > pr-results/${PR}/meta.json <<EOF
+          {
+            "pr_number": $PR,
+            "pr_title": "$TITLE",
+            "run_date": "$RUN_DATE",
+            "drools_sha": "$DROOLS_SHA",
+            "total": $TOTAL,
+            "pass": $PASS,
+            "fail": $FAIL
+          }
+          EOF
+
+          echo "PR #$PR: $PASS passed, $FAIL failed out of $TOTAL total"
+
+      # ── 9. Regenerate dashboard ───────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install requests
+
+      - name: Generate dashboard
+        env:
+          GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          python3 scripts/generate_dashboard.py \
+            --pr-results-dir pr-results \
+            --upstream-repo  dmn-tck/tck \
+            --token          "$GITHUB_TOKEN" \
+            --output         docs/drools-dashboard.html
+
+      # ── 10. Commit and push ───────────────────────────────────────────────
+      - name: Commit and push results + dashboard
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pr-results/ docs/drools-dashboard.html
+          git diff --cached --quiet && echo "No changes" || \
+            git commit -m "results: PR #${PR_NUMBER} @ $(date -u +%Y-%m-%d)"
+          git push origin tck_dashboard
