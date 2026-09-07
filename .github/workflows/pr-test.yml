@@ -164,11 +164,21 @@ jobs:
           restore-keys: m2-drools-
 
       # ── 6. Build Drools 999-SNAPSHOT from source ────────────────────────────
+      #
+      # The TCK runner only needs kie-dmn-api and kie-dmn-core.
+      # Building the entire incubator-kie-drools repo triggers Quarkus extension
+      # builds that require Kogito artifacts from a separate repo (incubator-kie-
+      # kogito-runtimes) — which aren't available in CI.
+      #
+      # Solution: build only the DMN module subtree using -pl (project list) with
+      # -am (also make) to include all required upstream modules, and skip all
+      # Quarkus/extensions modules with -pl !<module>.
+      # ─────────────────────────────────────────────────────────────────────────
       - name: Clone apache/incubator-kie-drools
         if: steps.mode.outputs.should_test == 'true'
         run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
 
-      - name: Build Drools 999-SNAPSHOT (install to ~/.m2)
+      - name: Build Drools DMN modules only (kie-dmn-api + kie-dmn-core)
         if: steps.mode.outputs.should_test == 'true'
         working-directory: drools-src
         run: |
@@ -178,6 +188,9 @@ jobs:
             -Dcheckstyle.skip=true \
             -Denforcer.skip=true \
             -Dformatter.skip=true \
+            -Dquarkus.build.skip=true \
+            -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
+            -am \
             -T 2C \
             -q
 
