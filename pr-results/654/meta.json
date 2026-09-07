@@ -1,0 +1,9 @@
+{
+  "pr_number": 654,
+  "pr_title": "[DMN 1.6] Date / Time value accessor",
+  "run_date": "2026-09-07T05:09:21Z",
+  "drools_sha": "ea3d9408c81b",
+  "total": 3245,
+  "pass": 3144,
+  "fail": 101
+}

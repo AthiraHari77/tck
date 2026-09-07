@@ -1,0 +1,9 @@
+{
+  "pr_number": 739,
+  "pr_title": "Add tests for imports with no prefix",
+  "run_date": "2026-09-07T05:02:51Z",
+  "drools_sha": "ea3d9408c81b",
+  "total": 3391,
+  "pass": 3388,
+  "fail": 3
+}

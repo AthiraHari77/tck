@@ -1,0 +1,9 @@
+{
+  "pr_number": 720,
+  "pr_title": "Add tests for multiple imports DMN16-50",
+  "run_date": "2026-09-07T05:05:36Z",
+  "drools_sha": "ea3d9408c81b",
+  "total": 3390,
+  "pass": 3368,
+  "fail": 22
+}

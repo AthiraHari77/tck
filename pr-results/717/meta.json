@@ -1,0 +1,9 @@
+{
+  "pr_number": 717,
+  "pr_title": "Add tests for implicit conversions in Decisions, BKMs and DSs.",
+  "run_date": "2026-09-07T05:06:23Z",
+  "drools_sha": "ea3d9408c81b",
+  "total": 3402,
+  "pass": 3372,
+  "fail": 30
+}
