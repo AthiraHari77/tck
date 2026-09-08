@@ -1,9 +1,11 @@
 {
   "pr_number": 720,
   "pr_title": "Add tests for multiple imports DMN16-50",
-  "run_date": "2026-09-07T05:05:36Z",
-  "drools_sha": "ea3d9408c81b",
+  "run_date": "2026-09-08T06:35:15Z",
+  "drools_sha": "7cc005d3dcd1",
   "total": 3390,
   "pass": 3368,
-  "fail": 22
+  "fail": 22,
+  "behind_by": 39,
+  "sync_status": "diverged"
 }

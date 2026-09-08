@@ -1,9 +1,11 @@
 {
   "pr_number": 740,
   "pr_title": "Add tests for imports with prefix",
-  "run_date": "2026-09-07T05:02:01Z",
-  "drools_sha": "ea3d9408c81b",
+  "run_date": "2026-09-08T06:31:47Z",
+  "drools_sha": "7cc005d3dcd1",
   "total": 3391,
   "pass": 3388,
-  "fail": 3
+  "fail": 3,
+  "behind_by": 12,
+  "sync_status": "diverged"
 }

@@ -1,9 +1,11 @@
 {
   "pr_number": 654,
   "pr_title": "[DMN 1.6] Date / Time value accessor",
-  "run_date": "2026-09-07T05:09:21Z",
-  "drools_sha": "ea3d9408c81b",
+  "run_date": "2026-09-08T06:38:42Z",
+  "drools_sha": "7cc005d3dcd1",
   "total": 3245,
   "pass": 3144,
-  "fail": 101
+  "fail": 101,
+  "behind_by": 102,
+  "sync_status": "diverged"
 }

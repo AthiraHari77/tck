@@ -1,9 +1,11 @@
 {
   "pr_number": 746,
   "pr_title": "Update decisionservice result evaluation logic to account for implicit conversion",
-  "run_date": "2026-09-07T05:00:53Z",
-  "drools_sha": "ea3d9408c81b",
+  "run_date": "2026-09-08T06:30:56Z",
+  "drools_sha": "7cc005d3dcd1",
   "total": 3391,
   "pass": 3388,
-  "fail": 3
+  "fail": 3,
+  "behind_by": 4,
+  "sync_status": "diverged"
 }
