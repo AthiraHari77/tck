@@ -277,15 +277,45 @@ jobs:
             PASS=$(grep -c "SUCCESS"                pr-results/${PR}/tck_results.csv || true)
             FAIL=$(grep -c 'ERROR\|FAILURE\|SKIPPED' pr-results/${PR}/tck_results.csv || true)
 
-            # Fetch PR title from upstream API
-            TITLE=$(curl -s \
+            # Fetch PR details from upstream API (title + sync status)
+            PR_JSON=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}")
+
+            TITLE=$(echo "$PR_JSON" \
               | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('title',''))" \
               2>/dev/null || echo "PR #${PR}")
 
-            # Write metadata
+            # Check how many commits the PR branch is BEHIND upstream master.
+            # GitHub API returns: {"ahead_by": N, "behind_by": N, "status": "ahead|behind|diverged|identical"}
+            # "behind_by" = number of commits on master that the PR branch has NOT merged.
+            # If behind_by > 0, test results may include false positives from stale state.
+            PR_HEAD_SHA=$(echo "$PR_JSON" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
+              2>/dev/null || echo "")
+            PR_BASE_SHA=$(echo "$PR_JSON" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('base',{}).get('sha',''))" \
+              2>/dev/null || echo "")
+
+            BEHIND_BY=0
+            SYNC_STATUS="unknown"
+            if [ -n "$PR_HEAD_SHA" ] && [ -n "$PR_BASE_SHA" ]; then
+              COMPARE_JSON=$(curl -s \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/dmn-tck/tck/compare/master...${PR_HEAD_SHA}")
+              BEHIND_BY=$(echo "$COMPARE_JSON" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('behind_by', 0))" \
+                2>/dev/null || echo "0")
+              SYNC_STATUS=$(echo "$COMPARE_JSON" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
+                2>/dev/null || echo "unknown")
+            fi
+
+            echo "PR #${PR} sync status: $SYNC_STATUS (behind_by=$BEHIND_BY)"
+
+            # Write metadata including sync information
             cat > pr-results/${PR}/meta.json << EOF
           {
             "pr_number": $PR,
@@ -294,7 +324,9 @@ jobs:
             "drools_sha": "$DROOLS_SHA",
             "total": $TOTAL,
             "pass": $PASS,
-            "fail": $FAIL
+            "fail": $FAIL,
+            "behind_by": $BEHIND_BY,
+            "sync_status": "$SYNC_STATUS"
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
