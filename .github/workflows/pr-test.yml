@@ -316,6 +316,7 @@ jobs:
         run: |
           python3 scripts/generate_dashboard.py \
             --pr-results-dir pr-results \
+            --baseline-csv   TestResults/Drools/999-SNAPSHOT/tck_results.csv \
             --upstream-repo  dmn-tck/tck \
             --token          "$GITHUB_TOKEN" \
             --output         docs/drools-dashboard.html

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
 BAMOE TCK Dashboard Generator
-Reads per-PR result folders + queries upstream GitHub API for open PRs.
-Produces a self-contained HTML dashboard.
+Reads per-PR result folders + baseline CSV + queries upstream GitHub API for PRs.
+Produces a self-contained HTML dashboard that clearly differentiates:
+  - Existing baseline failures (already failing on master, not caused by any PR)
+  - Net-new failures introduced by a specific open PR
 
 Usage:
     python3 scripts/generate_dashboard.py \
-        --pr-results-dir pr-results \
-        --upstream-repo  dmn-tck/tck \
-        --token          $GITHUB_TOKEN \
-        --output         docs/drools-dashboard.html
+        --pr-results-dir  pr-results \
+        --baseline-csv    TestResults/Drools/999-SNAPSHOT/tck_results.csv \
+        --upstream-repo   dmn-tck/tck \
+        --token           $GITHUB_TOKEN \
+        --output          docs/drools-dashboard.html
 """
 
 import argparse
@@ -77,6 +80,10 @@ def pr_new_suites(files):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def parse_csv(csv_path):
+    """
+    Returns (suite_totals, failures_list, summary_dict).
+    Each failure is identified by a (suite_path, case_id) key for deduplication.
+    """
     failures = []
     suite_totals = defaultdict(lambda: {"pass": 0, "fail": 0, "total": 0})
 
@@ -90,9 +97,9 @@ def parse_csv(csv_path):
             status     = row[3].strip('"')
             message    = row[4].strip('"') if len(row) > 4 else ""
 
-            parts  = suite_path.split("/")
-            level  = parts[0].replace("compliance-level-", "L") if parts else "?"
-            suite  = parts[1] if len(parts) >= 2 else suite_path
+            parts = suite_path.split("/")
+            level = parts[0].replace("compliance-level-", "L") if parts else "?"
+            suite = parts[1] if len(parts) >= 2 else suite_path
 
             suite_totals[suite]["total"] += 1
             if status == "SUCCESS":
@@ -103,6 +110,8 @@ def parse_csv(csv_path):
                     "suite": suite, "level": level,
                     "case_id": case_id, "test": test_name,
                     "message": message, "suite_path": suite_path,
+                    # unique key used for baseline comparison
+                    "key": f"{suite_path}::{case_id}",
                 })
 
     total  = sum(v["total"] for v in suite_totals.values())
@@ -111,14 +120,37 @@ def parse_csv(csv_path):
     return dict(suite_totals), failures, {"total": total, "pass": passed, "fail": failed}
 
 
+def load_baseline(baseline_csv):
+    """
+    Load the committed baseline (TestResults/Drools/999-SNAPSHOT/tck_results.csv).
+    Returns a set of failure keys: {suite_path::case_id, ...}
+    """
+    if not baseline_csv or not os.path.exists(baseline_csv):
+        print("WARNING: No baseline CSV found — all failures will be shown as new.", file=sys.stderr)
+        return set()
+
+    _, failures, summary = parse_csv(baseline_csv)
+    keys = {f["key"] for f in failures}
+    print(f"Baseline loaded: {summary['fail']} existing failures from {baseline_csv}")
+    return keys
+
+
+def split_failures(failures, baseline_keys):
+    """
+    Split a PR's failures into:
+      - existing: already failing in baseline (not caused by this PR)
+      - new:      not in baseline (introduced or exposed by this PR)
+    """
+    existing = [f for f in failures if f["key"] in baseline_keys]
+    new      = [f for f in failures if f["key"] not in baseline_keys]
+    return existing, new
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Load per-PR results from disk
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_pr_results(pr_results_dir):
-    """
-    Returns dict: { pr_number(int): { meta, suite_totals, failures, summary } }
-    """
     results = {}
     if not os.path.isdir(pr_results_dir):
         return results
@@ -165,7 +197,7 @@ body {
   background: #fff; color: #1f2328;
   padding: 24px 20px 56px;
 }
-.page { max-width: 920px; margin: 0 auto; }
+.page { max-width: 960px; margin: 0 auto; }
 .header { border-bottom: 2px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 24px; }
 .header h1 { font-size: 20px; font-weight: 700; }
 .header-meta { font-size: 12px; color: #57606a; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px 20px; }
@@ -175,18 +207,21 @@ section { margin-bottom: 32px; }
   color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 14px; }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;
   vertical-align: middle; white-space: nowrap; }
-.badge-fail    { background: #fee2e2; color: #991b1b; }
-.badge-pass    { background: #d1fae5; color: #065f46; }
-.badge-info    { background: #dbeafe; color: #1e40af; }
-.badge-purple  { background: #ede9fe; color: #5b21b6; }
-.badge-gray    { background: #f3f4f6; color: #374151; }
-.badge-orange  { background: #ffedd5; color: #9a3412; }
-.badge-merged  { background: #d1fae5; color: #065f46; }
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.badge-fail     { background: #fee2e2; color: #991b1b; }
+.badge-new-fail { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+.badge-existing { background: #fef3c7; color: #92400e; }
+.badge-pass     { background: #d1fae5; color: #065f46; }
+.badge-info     { background: #dbeafe; color: #1e40af; }
+.badge-purple   { background: #ede9fe; color: #5b21b6; }
+.badge-gray     { background: #f3f4f6; color: #374151; }
+.badge-merged   { background: #d1fae5; color: #065f46; }
+.badge-stale    { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
 .kpi { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 12px; text-align: center; }
-.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.15; }
+.kpi-value { font-size: 24px; font-weight: 700; line-height: 1.15; }
 .kpi-label { font-size: 11px; color: #57606a; margin-top: 3px; }
-.green { color: #065f46; } .red { color: #991b1b; } .orange { color: #92400e; } .blue { color: #1e40af; }
+.green { color: #065f46; } .red { color: #991b1b; } .orange { color: #92400e; }
+.blue { color: #1e40af; } .yellow { color: #854d0e; }
 .table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 10px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700;
@@ -194,15 +229,18 @@ thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 
 tbody tr { border-bottom: 1px solid #f0f1f3; }
 tbody tr:last-child { border-bottom: none; }
 tbody td { padding: 8px 10px; vertical-align: top; }
-tbody tr:hover { background: #fafbfc; }
+tbody tr.row-new     { background: #fff5f5; }
+tbody tr.row-existing { background: #fffbeb; }
+tbody tr:hover { filter: brightness(0.97); }
 .mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
 code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px;
   background: #f3f4f6; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
 .pr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .pr-card { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; }
-.pr-card.has-failures { border-left: 3px solid #ef4444; }
-.pr-card.all-pass     { border-left: 3px solid #059669; }
-.pr-card.not-tested   { border-left: 3px solid #d1d5db; }
+.pr-card.has-new-failures { border-left: 4px solid #ef4444; }
+.pr-card.has-only-existing { border-left: 4px solid #f59e0b; }
+.pr-card.all-pass  { border-left: 4px solid #059669; }
+.pr-card.not-tested { border-left: 4px solid #d1d5db; }
 .pr-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .pr-title a { color: #3b82d4; text-decoration: none; }
 .pr-title a:hover { text-decoration: underline; }
@@ -210,30 +248,39 @@ code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px;
 .pr-suites { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 .pr-result { font-size: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
 .pr-result.fail { color: #991b1b; }
+.pr-result.warn { color: #92400e; }
 .pr-result.pass { color: #065f46; }
 .pr-result.pending { color: #57606a; font-style: italic; }
-.fail-detail { margin-top: 8px; }
-.fail-row { font-size: 11px; padding: 3px 0; border-bottom: 1px solid #f3f4f6; display: flex; gap: 8px; flex-wrap: wrap; }
+.fail-detail { margin-top: 6px; }
+.fail-row { font-size: 11px; padding: 3px 0; border-bottom: 1px solid #f3f4f6; display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .fail-row:last-child { border-bottom: none; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; align-items: center; }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
 .attention-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px;
   padding: 12px 14px; font-size: 13px; color: #9a3412; margin-bottom: 14px; }
-.bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.bar-label { font-size: 12px; color: #57606a; min-width: 80px; }
-.bar-track { flex: 1; height: 12px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-.bar-fill  { height: 100%; border-radius: 3px; }
-.bar-val   { font-size: 11px; color: #57606a; min-width: 58px; text-align: right; }
+.info-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;
+  padding: 10px 14px; font-size: 12px; color: #0369a1; margin-bottom: 14px; }
+.baseline-box { background: #fefce8; border: 1px solid #fde047; border-radius: 6px;
+  padding: 10px 14px; font-size: 12px; color: #713f12; margin-bottom: 14px; }
 """
 
 
-def status_badge(fail_count, tested):
-    if not tested:
-        return '<span class="badge badge-gray">not tested</span>'
-    if fail_count == 0:
-        return '<span class="badge badge-pass">all pass</span>'
-    return f'<span class="badge badge-fail">{fail_count} failure{"s" if fail_count != 1 else ""}</span>'
+def stale_badge(run_date_str):
+    """Return a stale badge if the result is older than 7 days."""
+    if not run_date_str:
+        return ""
+    try:
+        run_dt = datetime.fromisoformat(run_date_str.replace("Z", "+00:00"))
+        age_days = (datetime.now(timezone.utc) - run_dt).days
+        if age_days > 7:
+            return f'<span class="badge badge-stale" title="Result is {age_days} days old">stale ({age_days}d)</span>'
+    except Exception:
+        pass
+    return ""
 
 
-def pr_card(pr, pr_result, suites, upstream_repo):
+def pr_card(pr, pr_result, suites, upstream_repo, baseline_keys):
     number  = pr["number"]
     title   = escape(pr["title"])
     url     = pr["html_url"]
@@ -243,7 +290,7 @@ def pr_card(pr, pr_result, suites, upstream_repo):
     state   = pr["state"]
 
     state_badge = '<span class="badge badge-merged">merged</span>' if merged else \
-                  '<span class="badge badge-gray">closed</span>' if state == "closed" else \
+                  '<span class="badge badge-gray">closed</span>'   if state == "closed" else \
                   '<span class="badge badge-info">open</span>'
 
     suite_chips = "".join(
@@ -251,42 +298,53 @@ def pr_card(pr, pr_result, suites, upstream_repo):
         for s in sorted(suites)
     ) if suites else ""
 
-    tested = pr_result is not None
-    fail_count = pr_result["summary"]["fail"] if tested else 0
-    pass_count = pr_result["summary"]["pass"] if tested else 0
-    total      = pr_result["summary"]["total"] if tested else 0
-    run_date   = pr_result["meta"].get("run_date", "")[:10] if tested else ""
+    tested     = pr_result is not None
+    run_date   = pr_result["meta"].get("run_date", "") if tested else ""
     drools_sha = pr_result["meta"].get("drools_sha", "") if tested else ""
 
-    card_class = "has-failures" if (tested and fail_count > 0) else \
-                 "all-pass"     if (tested and fail_count == 0) else \
-                 "not-tested"
+    if tested:
+        existing_fails, new_fails = split_failures(pr_result["failures"], baseline_keys)
+        total      = pr_result["summary"]["total"]
+        pass_count = pr_result["summary"]["pass"]
 
-    # Show top 3 failures inline
-    fail_rows = ""
-    if tested and fail_count > 0:
-        for f in pr_result["failures"][:3]:
+        # Card border colour:
+        #   red    = has net-new failures (PR introduces problems)
+        #   amber  = only pre-existing failures (PR is clean, baseline issues remain)
+        #   green  = no failures at all
+        if new_fails:
+            card_class = "has-new-failures"
+        elif existing_fails:
+            card_class = "has-only-existing"
+        else:
+            card_class = "all-pass"
+
+        # Result line
+        new_badge = f'<span class="badge badge-new-fail">{len(new_fails)} new failure{"s" if len(new_fails)!=1 else ""}</span>' if new_fails else ""
+        exist_badge = f'<span class="badge badge-existing">{len(existing_fails)} pre-existing</span>' if existing_fails else ""
+        pass_badge = '<span class="badge badge-pass">all pass</span>' if not new_fails and not existing_fails else ""
+        stale = stale_badge(run_date)
+
+        # Inline preview of new failures only (top 3)
+        fail_rows = ""
+        for f in new_fails[:3]:
             fail_rows += f"""<div class="fail-row">
   <span class="badge badge-gray">{escape(f['level'])}</span>
   <span class="mono">{escape(f['suite'])}</span>
   <span class="mono">{escape(f['case_id'])}</span>
   <code>{escape(f['message'][:80])}{'…' if len(f['message']) > 80 else ''}</code>
 </div>"""
-        if fail_count > 3:
-            fail_rows += f'<div class="fail-row" style="color:#57606a;font-size:11px;">… and {fail_count - 3} more — see full table below</div>'
+        if len(new_fails) > 3:
+            fail_rows += f'<div class="fail-row" style="color:#57606a;">… and {len(new_fails)-3} more — see table below</div>'
 
-    result_html = ""
-    if tested:
-        res_class = "fail" if fail_count > 0 else "pass"
+        res_class = "fail" if new_fails else ("warn" if existing_fails else "pass")
         result_html = f"""<div class="pr-result {res_class}">
-  {status_badge(fail_count, tested)} &nbsp;
-  {pass_count:,} / {total:,} passed
-  &nbsp;·&nbsp; tested {run_date}
-  &nbsp;·&nbsp; <code>{escape(drools_sha)}</code>
+  {new_badge}{exist_badge}{pass_badge} &nbsp;
+  {pass_count:,} / {total:,} passed &nbsp;·&nbsp; {run_date[:10]} &nbsp;·&nbsp; <code>{escape(drools_sha)}</code> {stale}
   {('<div class="fail-detail">' + fail_rows + '</div>') if fail_rows else ''}
 </div>"""
     else:
-        result_html = '<div class="pr-result pending">Not yet tested against Drools 999-SNAPSHOT</div>'
+        card_class   = "not-tested"
+        result_html  = '<div class="pr-result pending">Not yet tested against Drools 999-SNAPSHOT</div>'
 
     return f"""<div class="pr-card {card_class}">
   <div class="pr-title"><a href="{url}" target="_blank" rel="noopener">#{number} {title}</a></div>
@@ -300,17 +358,47 @@ def pr_card(pr, pr_result, suites, upstream_repo):
 </div>"""
 
 
-def full_failures_table(all_failures_by_pr):
-    """Renders the full failure table across all tested PRs."""
-    if not all_failures_by_pr:
+def baseline_failures_table(baseline_keys_with_details):
+    """Table showing all existing baseline failures (on master, independent of PRs)."""
+    if not baseline_keys_with_details:
+        return '<div style="color:#057a55;font-size:13px;padding:10px 0;">&#x2705; No baseline failures on master.</div>'
+    rows = ""
+    for f in sorted(baseline_keys_with_details, key=lambda x: x["suite"]):
+        gh_url = f"https://github.com/dmn-tck/tck/tree/master/TestCases/{escape(f['suite_path'])}"
+        rows += f"""<tr>
+  <td class="mono" style="white-space:nowrap;">
+    <span class="badge badge-gray">{escape(f['level'])}</span>&nbsp;
+    <a href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
+  </td>
+  <td class="mono">{escape(f['case_id'])}</td>
+  <td class="mono">{escape(f['test'])}</td>
+  <td><code>{escape(f['message'])}</code></td>
+</tr>"""
+    return f"""<div class="table-wrap"><table>
+  <thead><tr><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table></div>"""
+
+
+def pr_failures_table(all_pr_failures_by_pr, baseline_keys):
+    """
+    Full failures table for all tested PRs.
+    Rows are colour-coded: red = new failure, amber = pre-existing.
+    """
+    if not all_pr_failures_by_pr:
         return '<div style="color:#057a55;font-size:13px;padding:10px 0;">&#x2705; No failures across all tested PRs.</div>'
 
     rows = ""
-    for pr_num, failures in sorted(all_failures_by_pr.items()):
+    for pr_num, failures in sorted(all_pr_failures_by_pr.items()):
         for f in failures:
+            is_new   = f["key"] not in baseline_keys
+            row_class = "row-new" if is_new else "row-existing"
+            kind_badge = '<span class="badge badge-new-fail">new</span>' if is_new else \
+                         '<span class="badge badge-existing">pre-existing</span>'
             gh_url = f"https://github.com/dmn-tck/tck/tree/master/TestCases/{escape(f['suite_path'])}"
-            rows += f"""<tr>
+            rows += f"""<tr class="{row_class}">
   <td><span class="badge badge-info">PR #{pr_num}</span></td>
+  <td>{kind_badge}</td>
   <td class="mono" style="white-space:nowrap;">
     <span class="badge badge-gray">{escape(f['level'])}</span>&nbsp;
     <a href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
@@ -320,8 +408,13 @@ def full_failures_table(all_failures_by_pr):
   <td><code>{escape(f['message'])}</code></td>
 </tr>"""
 
-    return f"""<div class="table-wrap"><table>
-  <thead><tr><th>PR</th><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr></thead>
+    return f"""<div class="legend">
+  <span style="font-weight:600;color:#57606a;">Legend:</span>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fff5f5;border:1px solid #fca5a5;"></div> New failure introduced by PR</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fffbeb;border:1px solid #fde68a;"></div> Pre-existing baseline failure</div>
+</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>PR</th><th>Kind</th><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr></thead>
   <tbody>{rows}</tbody>
 </table></div>"""
 
@@ -330,10 +423,13 @@ def full_failures_table(all_failures_by_pr):
 # Main builder
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
+def build_dashboard(pr_results_dir, baseline_csv, upstream_repo, token, output_path):
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    # Load all per-PR results from disk
+    # Load baseline failures (existing failures on master)
+    baseline_keys = load_baseline(baseline_csv)
+
+    # Load per-PR results
     pr_results = load_pr_results(pr_results_dir)
     print(f"Loaded results for {len(pr_results)} PRs: {sorted(pr_results.keys())}")
 
@@ -341,62 +437,95 @@ def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
     print(f"Fetching PRs from {upstream_repo}...")
     all_prs = fetch_prs(upstream_repo, token, state="all", limit=60)
 
-    # For each PR get files changed
     pr_suites_map = {}
     for pr in all_prs:
-        num = pr["number"]
+        num   = pr["number"]
         files = fetch_pr_files(upstream_repo, num, token)
         pr_suites_map[num] = pr_new_suites(files)
 
     open_prs   = [p for p in all_prs if p["state"] == "open"]
     merged_prs = [p for p in all_prs if p.get("merged_at")][:10]
 
-    # KPI counts
-    total_open     = len(open_prs)
-    open_with_tests = sum(1 for p in open_prs if pr_suites_map.get(p["number"]))
-    tested_count   = len(pr_results)
-    prs_with_fail  = sum(1 for r in pr_results.values() if r["summary"]["fail"] > 0)
+    # Load baseline failure details for the baseline table
+    baseline_failure_details = []
+    if baseline_csv and os.path.exists(baseline_csv):
+        _, bl_failures, _ = parse_csv(baseline_csv)
+        baseline_failure_details = bl_failures
 
-    # Attention — open PRs with failures
-    attention_prs = [p for p in open_prs
-                     if p["number"] in pr_results and pr_results[p["number"]]["summary"]["fail"] > 0]
+    # KPI counts — using net-new failures only
+    total_open       = len(open_prs)
+    open_with_tests  = sum(1 for p in open_prs if pr_suites_map.get(p["number"]))
+    tested_count     = len(pr_results)
+    prs_with_new_fail = sum(
+        1 for r in pr_results.values()
+        if any(f["key"] not in baseline_keys for f in r["failures"])
+    )
 
-    # All failures grouped by PR
-    all_failures_by_pr = {num: data["failures"]
-                          for num, data in pr_results.items()
-                          if data["failures"]}
+    # Attention: open PRs with net-new failures only
+    attention_prs = []
+    for p in open_prs:
+        res = pr_results.get(p["number"])
+        if res:
+            _, new_fails = split_failures(res["failures"], baseline_keys)
+            if new_fails:
+                attention_prs.append((p, new_fails))
 
-    # ── Build HTML ────────────────────────────────────────────────────────
+    # All failures grouped by PR (for the full table)
+    all_pr_failures_by_pr = {num: data["failures"]
+                              for num, data in pr_results.items()
+                              if data["failures"]}
 
-    # Attention box
+    # ── Build HTML ────────────────────────────────────────────────────────────
+
+    # Attention box — only PRs with NET-NEW failures
     attention_html = ""
     if attention_prs:
         items = "".join(
-            f'<li><a href="{p["html_url"]}" target="_blank" rel="noopener">#{p["number"]} {escape(p["title"])}</a>'
-            f' — <strong>{pr_results[p["number"]]["summary"]["fail"]} failure(s)</strong></li>'
-            for p in attention_prs
+            f'<li><a href="{p["html_url"]}" target="_blank" rel="noopener">'
+            f'#{p["number"]} {escape(p["title"])}</a>'
+            f' — <strong>{len(nf)} new failure{"s" if len(nf)!=1 else ""}</strong> introduced by this PR</li>'
+            for p, nf in attention_prs
         )
-        attention_html = f'<div class="attention-box">&#x26A0;&#xFE0F; <strong>Needs attention</strong> — {len(attention_prs)} open PR(s) have test failures:<ul style="margin-top:6px;padding-left:18px;">{items}</ul></div>'
+        attention_html = f"""<div class="attention-box">
+&#x26A0;&#xFE0F; <strong>Needs attention</strong> — {len(attention_prs)} open PR(s) introduce new test failures:
+<ul style="margin-top:6px;padding-left:18px;">{items}</ul>
+</div>"""
+
+    # Baseline info box
+    baseline_html = ""
+    if baseline_failure_details:
+        baseline_html = f"""<div class="baseline-box">
+&#x1F4CB; <strong>Baseline:</strong> {len(baseline_failure_details)} existing failure(s) already present on master
+(independent of any PR). These are shown in amber throughout the dashboard and do <em>not</em> count against open PRs.
+</div>"""
 
     # KPIs
     kpis = f"""<div class="kpi-row">
   <div class="kpi"><div class="kpi-value blue">{total_open}</div><div class="kpi-label">Open Upstream PRs</div></div>
   <div class="kpi"><div class="kpi-value orange">{open_with_tests}</div><div class="kpi-label">PRs Adding Tests</div></div>
   <div class="kpi"><div class="kpi-value green">{tested_count}</div><div class="kpi-label">PRs Tested</div></div>
-  <div class="kpi"><div class="kpi-value red">{prs_with_fail}</div><div class="kpi-label">PRs With Failures</div></div>
+  <div class="kpi"><div class="kpi-value red">{prs_with_new_fail}</div><div class="kpi-label">PRs With New Failures</div></div>
+  <div class="kpi"><div class="kpi-value yellow">{len(baseline_failure_details)}</div><div class="kpi-label">Baseline Failures</div></div>
 </div>"""
 
     # Open PRs board
     open_cards = "".join(
-        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo)
+        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo, baseline_keys)
         for p in open_prs
     ) or '<div style="color:#57606a;font-size:13px;padding:10px 0;">No open upstream PRs.</div>'
 
     # Merged PRs board
     merged_cards = "".join(
-        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo)
+        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo, baseline_keys)
         for p in merged_prs
     ) or '<div style="color:#57606a;font-size:13px;padding:10px 0;">No recently merged PRs.</div>'
+
+    # Total failures counting (new only)
+    total_new_failures = sum(
+        len([f for f in data["failures"] if f["key"] not in baseline_keys])
+        for data in pr_results.values()
+    )
+    total_all_failures = sum(len(data["failures"]) for data in pr_results.values())
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -419,6 +548,7 @@ def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
 </div>
 
 {attention_html}
+{baseline_html}
 
 <section>
   <div class="section-title">Overview</div>
@@ -431,6 +561,11 @@ def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
     <span class="badge badge-purple" style="margin-left:4px;">{open_with_tests} add tests</span>
   </div>
   <div class="pr-grid">{open_cards}</div>
+  <div style="margin-top:10px;font-size:11px;color:#57606a;">
+    <strong style="color:#ef4444;">Red border</strong> = PR introduces new failures &nbsp;·&nbsp;
+    <strong style="color:#f59e0b;">Amber border</strong> = only pre-existing baseline failures, PR is clean &nbsp;·&nbsp;
+    <strong style="color:#059669;">Green border</strong> = all passing
+  </div>
 </section>
 
 <section>
@@ -439,15 +574,28 @@ def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
 </section>
 
 <section>
-  <div class="section-title">All Failures Across Tested PRs
-    <span class="badge badge-fail" style="margin-left:6px;">{sum(len(v) for v in all_failures_by_pr.values())} total</span>
+  <div class="section-title">Baseline Failures — Already on Master
+    <span class="badge badge-existing" style="margin-left:6px;">{len(baseline_failure_details)} failures</span>
   </div>
-  {full_failures_table(all_failures_by_pr)}
+  <div class="info-box">
+    These failures exist on the current master branch <strong>before any PR is applied</strong>.
+    They are pre-existing issues in Drools 999-SNAPSHOT unrelated to the open PRs above.
+    Any PR that only shows these failures is <strong>not introducing new problems</strong>.
+  </div>
+  {baseline_failures_table(baseline_failure_details)}
+</section>
+
+<section>
+  <div class="section-title">All Failures Across Tested PRs
+    <span class="badge badge-new-fail" style="margin-left:6px;">{total_new_failures} new</span>
+    <span class="badge badge-existing" style="margin-left:4px;">{total_all_failures - total_new_failures} pre-existing</span>
+  </div>
+  {pr_failures_table(all_pr_failures_by_pr, baseline_keys)}
 </section>
 
 </div>
 <footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;
-  margin-top:32px;padding-top:12px;max-width:920px;margin-left:auto;margin-right:auto;">
+  margin-top:32px;padding-top:12px;max-width:960px;margin-left:auto;margin-right:auto;">
   BAMOE TCK Dashboard &nbsp;·&nbsp; Auto-generated by CI &nbsp;·&nbsp;
   <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener" style="color:#9ca3af;">{upstream_repo}</a>
   &nbsp;·&nbsp; Made with IBM Bob
@@ -466,6 +614,8 @@ def build_dashboard(pr_results_dir, upstream_repo, token, output_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pr-results-dir", required=True)
+    parser.add_argument("--baseline-csv",   default="TestResults/Drools/999-SNAPSHOT/tck_results.csv",
+                        help="Path to the committed baseline CSV (master results)")
     parser.add_argument("--upstream-repo",  default="dmn-tck/tck")
     parser.add_argument("--token",          default=os.environ.get("GITHUB_TOKEN", ""))
     parser.add_argument("--output",         required=True)
@@ -473,6 +623,7 @@ if __name__ == "__main__":
 
     build_dashboard(
         pr_results_dir=args.pr_results_dir,
+        baseline_csv=args.baseline_csv,
         upstream_repo=args.upstream_repo,
         token=args.token,
         output_path=args.output,
