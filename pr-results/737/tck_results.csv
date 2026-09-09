@@ -3389,3 +3389,5 @@
 "compliance-level-3/1156-range-function","1156-range-function-test-01","027","SUCCESS",""
 "compliance-level-3/1161-boxed-list-expression","1161-boxed-list-expression-test-01","001","SUCCESS",""
 "compliance-level-3/1161-boxed-list-expression","1161-boxed-list-expression-test-01","002","SUCCESS",""
+"compliance-level-3/1162-import-same-name","1162-import-same-name-test-01","001","ERROR","FAILURE: 'Decision' expected='9' but found='null'"
+"compliance-level-3/1162-import-same-name","1162-import-same-name-test-02","001","ERROR","FAILURE: 'Decision' expected='9' but found='12'"

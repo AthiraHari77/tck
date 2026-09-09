@@ -1,11 +1,13 @@
 {
   "pr_number": 714,
   "pr_title": "Updating the test cases for comparison of DMN FEEL range in unary format",
-  "run_date": "2026-09-08T06:37:00Z",
-  "drools_sha": "7cc005d3dcd1",
-  "total": 3389,
-  "pass": 3369,
-  "fail": 20,
+  "run_date": "2026-09-09T14:00:58Z",
+  "drools_sha": "456693c0d18c",
+  "total": 3390,
+  "pass": 3389,
+  "fail": 1,
   "behind_by": 39,
-  "sync_status": "diverged"
+  "sync_status": "diverged",
+  "tested_as_synced": true,
+  "merge_conflict": false
 }
