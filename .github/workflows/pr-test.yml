@@ -241,10 +241,28 @@ jobs:
               continue
             }
 
-            # ── c) Checkout the PR branch (detached HEAD is fine — read-only)
-            #    We do NOT merge. We simply switch the working tree to the PR's
-            #    proposed state so TestCases/ reflects what the PR adds/changes.
+            # ── c) Checkout the PR branch, then locally merge master ─────────
+            #    We check out the PR branch and immediately merge master into it
+            #    locally. This gives us a "what would failing look like if the
+            #    author synced today" view — eliminating false positives from
+            #    stale branches — without ever touching the author's remote.
+            #    The entire WORK_DIR is discarded after results are copied, so
+            #    this merge never leaves this machine.
+            #
+            #    If the merge has conflicts (rare for TestCases-only PRs), we
+            #    abort and fall back to testing the unmerged branch, recording
+            #    merge_conflict=true in meta.json so the dashboard can flag it.
             git checkout pr-${PR}
+            git config user.email "ci@bamoe-dashboard.local"
+            git config user.name  "BAMOE CI"
+            MERGE_CONFLICT=false
+            if git merge master --no-edit --no-ff 2>&1 | grep -q "CONFLICT"; then
+              echo "WARNING: PR #$PR has merge conflicts with master — testing unmerged branch"
+              git merge --abort 2>/dev/null || true
+              MERGE_CONFLICT=true
+            else
+              echo "PR #$PR — local merge of master succeeded (ephemeral, never pushed)"
+            fi
             cd ..
 
             # ── d) Run TCK runner inside the temp clone ──────────────────────
@@ -315,7 +333,15 @@ jobs:
 
             echo "PR #${PR} sync status: $SYNC_STATUS (behind_by=$BEHIND_BY)"
 
-            # Write metadata including sync information
+            # Write metadata — record whether results are from a merged view
+            # tested_as_synced=true  → master was locally merged before testing
+            #                          (results reflect "post-sync" state)
+            # tested_as_synced=false → merge had conflicts; tested raw PR branch
+            #                          (results may include noise from stale state)
+            TESTED_AS_SYNCED=true
+            if [ "$MERGE_CONFLICT" = "true" ]; then
+              TESTED_AS_SYNCED=false
+            fi
             cat > pr-results/${PR}/meta.json << EOF
           {
             "pr_number": $PR,
@@ -326,7 +352,9 @@ jobs:
             "pass": $PASS,
             "fail": $FAIL,
             "behind_by": $BEHIND_BY,
-            "sync_status": "$SYNC_STATUS"
+            "sync_status": "$SYNC_STATUS",
+            "tested_as_synced": $TESTED_AS_SYNCED,
+            "merge_conflict": $MERGE_CONFLICT
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"

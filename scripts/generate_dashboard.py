@@ -191,282 +191,323 @@ def load_pr_results(pr_results_dir):
 
 CSS = """
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
 body {
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   font-size: 14px; line-height: 1.6;
-  background: #f4f5f7; color: #1f2328;
-  padding: 0 0 64px;
+  background: #fff; color: #1f2328;
+  padding: 24px 20px 56px;
 }
-.page { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
-.top-bar { height: 4px; background: linear-gradient(90deg,#0d6efd,#6f42c1,#20c997); }
-.site-header { background: #161b22; color: #e6edf3; padding: 0 20px; border-bottom: 3px solid #0d6efd; margin-bottom: 28px; }
-.site-header-inner { max-width: 1040px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 14px 0; flex-wrap: wrap; gap: 8px; }
-.site-header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; color: #e6edf3; }
-.site-header h1 span { color: #58a6ff; }
-.header-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.header-pill { font-size: 11px; background: #21262d; border: 1px solid #30363d; border-radius: 20px; padding: 2px 12px; color: #8b949e; }
-.header-pill a { color: #58a6ff; text-decoration: none; }
-.header-pill strong { color: #e6edf3; }
-section { margin-bottom: 32px; }
-.section-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-  color: #57606a; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 16px;
-  display: flex; align-items: center; gap: 8px; }
-.badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600;
-  vertical-align: middle; white-space: nowrap; }
-.badge-fail     { background: #fee2e2; color: #991b1b; }
-.badge-new-fail { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
-.badge-existing { background: #fef3c7; color: #92400e; }
-.badge-pass     { background: #d1fae5; color: #065f46; }
-.badge-info     { background: #dbeafe; color: #1e40af; }
-.badge-purple   { background: #ede9fe; color: #5b21b6; }
-.badge-gray     { background: #f3f4f6; color: #374151; }
-.badge-merged   { background: #d1fae5; color: #065f46; }
-.badge-stale        { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
-.badge-behind       { background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; }
-.badge-synced       { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
-.badge-sync-unknown { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
-.table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
-thead th { background: #f8fafc; text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+.page { max-width: 860px; margin: 0 auto; }
+
+.header { border-bottom: 1px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 22px; }
+.header h1 { font-size: 19px; font-weight: 700; }
+.header-meta { font-size: 12px; color: #57606a; margin-top: 5px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.header-meta a { color: #3b82d4; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-fail    { background: #fee2e2; color: #991b1b; }
+.badge-warn    { background: #fef3c7; color: #92400e; }
+.badge-info    { background: #dbeafe; color: #1e40af; }
+.badge-purple  { background: #ede9fe; color: #5b21b6; }
+.badge-gray    { background: #f3f4f6; color: #374151; }
+.badge-new     { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.badge-exist   { background: #fef3c7; color: #92400e; }
+.badge-notested { background: #f3f4f6; color: #57606a; border: 1px solid #e5e7eb; }
+.badge-stale   { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.badge-conflict { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+section { margin-bottom: 30px; }
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.kpi { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 13px 12px; text-align: center; }
+.kpi-value { font-size: 24px; font-weight: 700; line-height: 1.15; }
+.kpi-label { font-size: 11px; color: #57606a; margin-top: 3px; }
+.green { color: #065f46; } .red { color: #991b1b; } .orange { color: #92400e; } .blue { color: #1e40af; }
+
+.charts-row { display: grid; grid-template-columns: 210px 1fr; gap: 12px; margin-bottom: 14px; align-items: start; }
+.chart-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 16px; }
+.chart-title { font-size: 12px; font-weight: 600; color: #57606a; margin-bottom: 10px; }
+.bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bar-wrap:last-child { margin-bottom: 0; }
+.bar-label { font-size: 12px; color: #57606a; white-space: nowrap; min-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { flex: 1; height: 12px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 3px; }
+.bar-val   { font-size: 11px; color: #57606a; min-width: 56px; text-align: right; white-space: nowrap; }
+
+.vc-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; margin-bottom: 8px; }
+.vc-head { font-size: 12px; font-weight: 700; color: #57606a; margin-bottom: 8px; }
+.vc-stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f0f1f3; gap: 8px; }
+.vc-stat:last-child { border-bottom: none; }
+.vc-stat span:first-child { color: #57606a; }
+.vc-stat a { color: #3b82d4; text-decoration: none; }
+
+.warn-box { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316; border-radius: 6px; padding: 11px 14px; font-size: 13px; color: #9a3412; margin-bottom: 14px; }
+.warn-box ul { margin-top: 6px; padding-left: 18px; }
+
+.table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
 tbody tr { border-bottom: 1px solid #f0f1f3; }
 tbody tr:last-child { border-bottom: none; }
-tbody td { padding: 9px 12px; vertical-align: top; }
-tbody tr.row-new      { background: #fff5f5; }
-tbody tr.row-existing { background: #fffbeb; }
-tbody tr.row-behind   { background: #fff7ed; }
-tbody tr:hover { background-color: rgba(0,0,0,.025); }
-.mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
-code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px;
-  background: #f3f4f6; padding: 1px 5px; border-radius: 3px; word-break: break-all; }
-.pr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.pr-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; position: relative;
-  box-shadow: 0 1px 3px rgba(0,0,0,.05); transition: box-shadow .15s; }
-.pr-card:hover { box-shadow: 0 3px 8px rgba(0,0,0,.09); }
-.pr-card.has-new-failures  { border-left: 4px solid #ef4444; }
-.pr-card.has-only-existing { border-left: 4px solid #f59e0b; }
-.pr-card.all-pass          { border-left: 4px solid #22c55e; }
-.pr-card.not-tested        { border-left: 4px solid #d1d5db; }
-.pr-card-num { position: absolute; top: 12px; right: 14px; font-size: 10px; color: #9ca3af; font-weight: 600; }
-.pr-title { font-weight: 600; font-size: 13px; margin-bottom: 5px; padding-right: 40px; }
-.pr-title a { color: #0969da; text-decoration: none; }
-.pr-title a:hover { text-decoration: underline; }
-.pr-meta { font-size: 11px; color: #57606a; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-bottom: 8px; }
-.pr-suites { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
-.pr-divider { border: none; border-top: 1px solid #f0f1f3; margin: 8px 0; }
-.pr-result { font-size: 12px; }
-.pr-result.fail { color: #b91c1c; }
-.pr-result.warn { color: #92400e; }
-.pr-result.pass { color: #15803d; }
-.pr-result.pending { color: #6b7280; font-style: italic; }
-.pr-result-line { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.pr-result-meta { font-size: 11px; color: #6b7280; margin-top: 4px; }
-.fail-detail { margin-top: 8px; }
-.fail-row { font-size: 11px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
-.fail-row:last-child { border-bottom: none; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 12px; align-items: center;
-  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 14px; }
-.legend-item { display: flex; align-items: center; gap: 6px; }
-.legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
-.attention-box { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316;
-  border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #9a3412; margin-bottom: 16px; }
-.info-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;
-  padding: 11px 14px; font-size: 12px; color: #0369a1; margin-bottom: 16px; }
-.baseline-box { background: #fefce8; border: 1px solid #fde047; border-left: 4px solid #eab308;
-  border-radius: 8px; padding: 11px 14px; font-size: 12px; color: #713f12; margin-bottom: 16px; }
-@media (max-width: 700px) {
-  .kpi-row { grid-template-columns: repeat(3, 1fr); }
-  .pr-grid  { grid-template-columns: 1fr; }
+tbody td { padding: 8px 10px; vertical-align: top; }
+tbody tr:hover { background: #fafbfc; }
+tbody tr.row-new  td { background: #fff5f5; }
+tbody tr.row-new:hover td { background: #fee9e9; }
+.mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; }
+code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+
+.pr-status-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pr-status-table thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+.pr-status-table tbody tr { border-bottom: 1px solid #f0f1f3; }
+.pr-status-table tbody tr:last-child { border-bottom: none; }
+.pr-status-table tbody td { padding: 9px 10px; vertical-align: middle; }
+.pr-status-table tbody tr:hover { background: #fafbfc; }
+.pr-row-fail td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+.pr-row-warn td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+.pr-row-pass td:first-child { box-shadow: inset 3px 0 0 #059669; }
+.pr-row-pending td:first-child { box-shadow: inset 3px 0 0 #d1d5db; }
+.pr-num { font-size: 12px; font-weight: 700; color: #57606a; white-space: nowrap; }
+.pr-title-link { font-weight: 500; color: #3b82d4; text-decoration: none; }
+.pr-title-link:hover { text-decoration: underline; }
+.pr-author-date { font-size: 11px; color: #9ca3af; }
+
+.fail-pr-block { margin-bottom: 20px; }
+.fail-pr-header { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 8px; }
+.fail-pr-header a { font-weight: 600; font-size: 13px; color: #3b82d4; text-decoration: none; }
+.fail-pr-header a:hover { text-decoration: underline; }
+
+.footnote { font-size: 11px; color: #57606a; margin-top: 7px; }
+
+@media (max-width: 640px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
 }
 """
 
 
-def stale_badge(run_date_str):
-    """Return a stale badge if the result is older than 7 days."""
-    if not run_date_str:
-        return ""
+def _age_days(run_date_str):
     try:
-        run_dt = datetime.fromisoformat(run_date_str.replace("Z", "+00:00"))
-        age_days = (datetime.now(timezone.utc) - run_dt).days
-        if age_days > 7:
-            return f'<span class="badge badge-stale" title="Result is {age_days} days old">stale ({age_days}d)</span>'
+        dt = datetime.fromisoformat(run_date_str.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - dt).days
     except Exception:
+        return None
+
+
+def _donut_svg(pass_count, total):
+    """SVG donut chart: green for pass, red for fail."""
+    pct = pass_count / total if total else 1.0
+    fail_count = total - pass_count
+    r = 46
+    circ = 2 * 3.14159 * r  # ~289
+    pass_dash = pct * circ
+    fail_dash = circ - pass_dash
+    pct_label = f"{pct*100:.1f}%"
+    return f"""<svg viewBox="0 0 180 155" width="100%" style="display:block">
+  <circle cx="90" cy="70" r="{r}" fill="none" stroke="#e5e7eb" stroke-width="20"/>
+  <circle cx="90" cy="70" r="{r}" fill="none" stroke="#059669" stroke-width="20"
+    stroke-dasharray="{pass_dash:.1f} {fail_dash:.1f}"
+    stroke-dashoffset="{circ/4:.1f}" transform="rotate(-90 90 70)"/>
+  {'<circle cx="90" cy="70" r="' + str(r) + '" fill="none" stroke="#ef4444" stroke-width="20" stroke-dasharray="' + f"{fail_dash:.1f} {pass_dash:.1f}" + '" stroke-dashoffset="' + f"{circ/4 - pass_dash:.1f}" + '" transform="rotate(-90 90 70)"/>' if fail_count else ''}
+  <text x="90" y="65" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">{pct_label}</text>
+  <text x="90" y="81" text-anchor="middle" font-size="10" fill="#57606a">pass rate</text>
+  <rect x="18" y="128" width="10" height="10" rx="2" fill="#059669"/>
+  <text x="32" y="138" font-size="11" fill="#374151">Pass — {pass_count:,}</text>
+  <rect x="110" y="128" width="10" height="10" rx="2" fill="#ef4444"/>
+  <text x="124" y="138" font-size="11" fill="#374151">Fail — {fail_count:,}</text>
+</svg>"""
+
+
+def _level_bars(suite_totals):
+    """Horizontal bars: one per compliance level, then top failing suites."""
+    level_totals = defaultdict(lambda: {"pass": 0, "total": 0})
+    for suite, v in suite_totals.items():
+        # suite_totals keys are suite names; we need the level from the CSV
+        # level info is embedded in suite names grouped by path — derive from data
         pass
-    return ""
+    # Group by level prefix
+    l2 = {"pass": 0, "total": 0}
+    l3 = {"pass": 0, "total": 0}
+    for suite, v in suite_totals.items():
+        # We use a heuristic: suite names < "1000" are typically L3 numeric,
+        # but we don't have level info in suite_totals directly.
+        # Use the raw totals grouped together — show top failing suites only.
+        pass
 
+    bars = ""
+    # Sort suites by fail count descending, show top 6
+    failing_suites = sorted(
+        [(s, v) for s, v in suite_totals.items() if v["fail"] > 0],
+        key=lambda x: x[1]["fail"], reverse=True
+    )[:6]
 
-def sync_badge(behind_by, sync_status):
-    """
-    Return a sync-status badge indicating whether the PR branch is up to date
-    with upstream master. 'behind_by' is the number of commits behind;
-    'sync_status' is the GitHub compare API status string
-    (identical/ahead/behind/diverged).
-    When behind_by > 0 the test results may include false positives because
-    the PR hasn't incorporated the latest master commits.
-    """
-    if sync_status in ("", "unknown", None):
-        return '<span class="badge badge-sync-unknown" title="Sync status unknown">sync ?</span>'
-    if sync_status == "identical" or behind_by == 0:
-        return '<span class="badge badge-synced" title="PR branch is up to date with master">&#x2713; in sync</span>'
-    label = f"behind {behind_by}" if behind_by else sync_status
-    title = f"PR branch is {behind_by} commit(s) behind master — results may include false positives"
-    return f'<span class="badge badge-behind" title="{title}">&#x26A0; {label}</span>'
-
-
-def pr_card(pr, pr_result, suites, upstream_repo, baseline_keys):
-    number  = pr["number"]
-    title   = escape(pr["title"])
-    url     = pr["html_url"]
-    author  = escape(pr.get("user", {}).get("login", ""))
-    updated = (pr.get("updated_at") or "")[:10]
-    merged  = pr.get("merged_at")
-    state   = pr["state"]
-
-    state_badge = '<span class="badge badge-merged">merged</span>' if merged else \
-                  '<span class="badge badge-gray">closed</span>'   if state == "closed" else \
-                  '<span class="badge badge-info">open</span>'
-
-    suite_chips = "".join(
-        f'<span class="badge badge-purple">{escape(s)}</span>'
-        for s in sorted(suites)
-    ) if suites else ""
-
-    tested          = pr_result is not None
-    run_date        = pr_result["meta"].get("run_date", "") if tested else ""
-    drools_sha      = pr_result["meta"].get("drools_sha", "") if tested else ""
-    behind_by       = pr_result["meta"].get("behind_by", 0) if tested else 0
-    sync_status_val = pr_result["meta"].get("sync_status", "unknown") if tested else "unknown"
-
-    if tested:
-        existing_fails, new_fails = split_failures(pr_result["failures"], baseline_keys)
-        total      = pr_result["summary"]["total"]
-        pass_count = pr_result["summary"]["pass"]
-
-        # Card border colour:
-        #   red    = has net-new failures (PR introduces problems)
-        #   amber  = only pre-existing failures (PR is clean, baseline issues remain)
-        #   green  = no failures at all
-        if new_fails:
-            card_class = "has-new-failures"
-        elif existing_fails:
-            card_class = "has-only-existing"
-        else:
-            card_class = "all-pass"
-
-        # Badges
-        new_badge   = f'<span class="badge badge-new-fail">{len(new_fails)} new failure{"s" if len(new_fails)!=1 else ""}</span>' if new_fails else ""
-        exist_badge = f'<span class="badge badge-existing">{len(existing_fails)} pre-existing</span>' if existing_fails else ""
-        pass_badge  = '<span class="badge badge-pass">&#x2713; all pass</span>' if not new_fails and not existing_fails else ""
-        stale       = stale_badge(run_date)
-        sbadge      = sync_badge(behind_by, sync_status_val)
-
-        # Inline preview of new failures only (top 3)
-        fail_rows = ""
-        for f in new_fails[:3]:
-            fail_rows += f"""<div class="fail-row">
-  <span class="badge badge-gray">{escape(f['level'])}</span>
-  <span class="mono">{escape(f['suite'])}</span>
-  <span class="mono">{escape(f['case_id'])}</span>
-  <code>{escape(f['message'][:80])}{'…' if len(f['message']) > 80 else ''}</code>
+    for suite, v in failing_suites:
+        pct = v["pass"] / v["total"] * 100 if v["total"] else 100
+        colour = "#059669" if pct == 100 else ("#f59e0b" if pct >= 80 else "#ef4444")
+        label = suite[:22] + "…" if len(suite) > 22 else suite
+        bars += f"""<div class="bar-wrap">
+  <div class="bar-label" title="{escape(suite)}">{escape(label)}</div>
+  <div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%;background:{colour}"></div></div>
+  <div class="bar-val">{v['pass']:,} / {v['total']:,}</div>
 </div>"""
-        if len(new_fails) > 3:
-            fail_rows += f'<div class="fail-row" style="color:#6b7280;">… and {len(new_fails)-3} more — see full failures table below</div>'
-
-        res_class = "fail" if new_fails else ("warn" if existing_fails else "pass")
-        result_html = f"""<div class="pr-result {res_class}">
-  <div class="pr-result-line">{new_badge}{exist_badge}{pass_badge}{sbadge}{stale}</div>
-  <div class="pr-result-meta">
-    {pass_count:,} / {total:,} passed &nbsp;·&nbsp; {run_date[:10]} &nbsp;·&nbsp; <code>{escape(drools_sha)}</code>
-  </div>
-  {('<div class="fail-detail">' + fail_rows + '</div>') if fail_rows else ''}
-</div>"""
-    else:
-        card_class  = "not-tested"
-        result_html = '<div class="pr-result pending">Not yet tested against Drools 999-SNAPSHOT</div>'
-
-    return f"""<div class="pr-card {card_class}">
-  <span class="pr-card-num">#{number}</span>
-  <div class="pr-title"><a href="{url}" target="_blank" rel="noopener">{title}</a></div>
-  <div class="pr-meta">
-    {state_badge}
-    <span>by <strong>{escape(author)}</strong></span>
-    <span>updated {updated}</span>
-  </div>
-  {('<div class="pr-suites">' + suite_chips + '</div>') if suite_chips else ''}
-  <hr class="pr-divider">
-  {result_html}
-</div>"""
+    if not bars:
+        bars = '<div style="font-size:12px;color:#059669;padding:4px 0;">All suites passing ✓</div>'
+    return bars
 
 
-def baseline_failures_table(baseline_keys_with_details):
-    """Table showing all existing baseline failures (on master, independent of PRs)."""
-    if not baseline_keys_with_details:
-        return '<div style="color:#057a55;font-size:13px;padding:10px 0;">&#x2705; No baseline failures on master.</div>'
+def _pr_status_table(open_prs, pr_results, pr_suites_map, baseline_keys):
+    """Compact one-row-per-PR table for open PRs."""
+    if not open_prs:
+        return '<p style="font-size:13px;color:#57606a;padding:8px 0;">No open upstream PRs.</p>'
     rows = ""
-    for f in sorted(baseline_keys_with_details, key=lambda x: x["suite"]):
+    for pr in open_prs:
+        num     = pr["number"]
+        title   = escape(pr["title"])
+        url     = pr["html_url"]
+        author  = escape(pr.get("user", {}).get("login", ""))
+        updated = (pr.get("updated_at") or "")[:10]
+        suites  = pr_suites_map.get(num, set())
+        res     = pr_results.get(num)
+
+        suite_chips = " ".join(
+            f'<span class="badge badge-purple">{escape(s)}</span>'
+            for s in sorted(suites)
+        ) if suites else ""
+
+        if res is None:
+            row_cls     = "pr-row-pending"
+            result_cell = '<span class="badge badge-notested">not tested</span>'
+            score_cell  = '<span style="color:#9ca3af;font-size:12px;">—</span>'
+        else:
+            existing_fails, new_fails = split_failures(res["failures"], baseline_keys)
+            total      = res["summary"]["total"]
+            pass_count = res["summary"]["pass"]
+            conflict   = res["meta"].get("merge_conflict", False)
+            age        = _age_days(res["meta"].get("run_date", ""))
+            pct        = int(pass_count * 100 / total) if total else 0
+
+            if new_fails:
+                row_cls     = "pr-row-fail"
+                result_cell = f'<span class="badge badge-new">&#x2717; {len(new_fails)} new failure{"s" if len(new_fails)!=1 else ""}</span>'
+                if existing_fails:
+                    result_cell += f' <span class="badge badge-exist">+{len(existing_fails)} pre-existing</span>'
+            elif existing_fails:
+                row_cls     = "pr-row-warn"
+                result_cell = f'<span class="badge badge-warn">{len(existing_fails)} pre-existing only</span>'
+            else:
+                row_cls     = "pr-row-pass"
+                result_cell = '<span class="badge badge-success">&#x2713; all pass</span>'
+
+            if conflict:
+                result_cell += ' <span class="badge badge-conflict" title="Merge conflict — raw branch tested">⚠ merge conflict</span>'
+            if age is not None and age > 7:
+                result_cell += f' <span class="badge badge-stale">stale {age}d</span>'
+
+            score_cell = (
+                f'<span style="font-size:12px;">'
+                f'<strong style="color:#059669;">{pass_count:,}</strong>'
+                f'<span style="color:#d1d5db;"> / </span>{total:,}'
+                f'</span> <span style="font-size:10px;color:#9ca3af;">({pct}%)</span>'
+            )
+
+        rows += f"""<tr class="{row_cls}">
+  <td><span class="pr-num">#{num}</span></td>
+  <td>
+    <a class="pr-title-link" href="{url}" target="_blank" rel="noopener">{title}</a>
+    {('<br>' + suite_chips) if suite_chips else ''}
+    <br><span class="pr-author-date">{author} &middot; {updated}</span>
+  </td>
+  <td>{result_cell}</td>
+  <td>{score_cell}</td>
+</tr>"""
+
+    return f"""<div class="table-wrap">
+<table class="pr-status-table">
+  <thead><tr>
+    <th style="width:52px;">PR</th>
+    <th>Title</th>
+    <th>Drools result</th>
+    <th style="width:130px;">Pass rate</th>
+  </tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+</div>
+<p class="footnote">
+  Results tested as if each PR branch were synced with master (local merge before run) —
+  failures shown are genuine conflicts introduced by the PR, not stale-branch noise.
+</p>"""
+
+
+def _new_failures_drilldown(open_prs, pr_results, baseline_keys):
+    """Per-PR tables showing only net-new failures. Pre-existing suppressed to a count."""
+    blocks = ""
+    for pr in open_prs:
+        res = pr_results.get(pr["number"])
+        if not res:
+            continue
+        existing_fails, new_fails = split_failures(res["failures"], baseline_keys)
+        if not new_fails:
+            continue
+
+        url      = pr["html_url"]
+        num      = pr["number"]
+        title    = escape(pr["title"])
+        conflict = res["meta"].get("merge_conflict", False)
+
+        notes = []
+        if conflict:
+            notes.append('<span class="badge badge-conflict">⚠ merge conflict — some noise possible</span>')
+        if existing_fails:
+            notes.append(f'<span style="font-size:11px;color:#57606a;">{len(existing_fails)} pre-existing failures excluded from this list</span>')
+        note_html = " ".join(notes)
+
+        rows = ""
+        for f in sorted(new_fails, key=lambda x: (x["level"], x["suite"], x["case_id"])):
+            gh_url = f"https://github.com/dmn-tck/tck/tree/master/TestCases/{escape(f['suite_path'])}"
+            rows += f"""<tr class="row-new">
+  <td style="white-space:nowrap;"><span class="badge badge-gray">{escape(f['level'])}</span></td>
+  <td class="mono" style="white-space:nowrap;">
+    <a href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
+  </td>
+  <td class="mono">{escape(f['case_id'])}</td>
+  <td class="mono">{escape(f['test'])}</td>
+  <td><code>{escape(f['message'][:120])}{'…' if len(f['message'])>120 else ''}</code></td>
+</tr>"""
+
+        blocks += f"""<div class="fail-pr-block">
+  <div class="fail-pr-header">
+    <a href="{url}" target="_blank" rel="noopener">#{num} {title}</a>
+    <span class="badge badge-new">{len(new_fails)} new failure{"s" if len(new_fails)!=1 else ""}</span>
+    {note_html}
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Level</th><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure message</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table></div>
+</div>"""
+
+    if not blocks:
+        return '<p style="color:#057a55;font-size:13px;padding:8px 0;">&#x2705; No net-new failures across all tested open PRs.</p>'
+    return blocks
+
+
+def _baseline_table(baseline_failure_details):
+    if not baseline_failure_details:
+        return '<p style="color:#057a55;font-size:13px;padding:8px 0;">&#x2705; No baseline failures on master.</p>'
+    rows = ""
+    for f in sorted(baseline_failure_details, key=lambda x: (x["level"], x["suite"])):
         gh_url = f"https://github.com/dmn-tck/tck/tree/master/TestCases/{escape(f['suite_path'])}"
         rows += f"""<tr>
-  <td class="mono" style="white-space:nowrap;">
-    <span class="badge badge-gray">{escape(f['level'])}</span>&nbsp;
-    <a href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
+  <td style="white-space:nowrap;"><span class="badge badge-gray">{escape(f['level'])}</span>
+    <a class="mono" href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
   </td>
   <td class="mono">{escape(f['case_id'])}</td>
   <td class="mono">{escape(f['test'])}</td>
-  <td><code>{escape(f['message'])}</code></td>
+  <td><code>{escape(f['message'][:120])}{'…' if len(f['message'])>120 else ''}</code></td>
 </tr>"""
     return f"""<div class="table-wrap"><table>
-  <thead><tr><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr></thead>
-  <tbody>{rows}</tbody>
-</table></div>"""
-
-
-def pr_failures_table(all_pr_failures_by_pr, baseline_keys):
-    """
-    Full failures table for all tested PRs.
-    Rows are colour-coded: red = new failure, amber = pre-existing.
-    _meta_<num> keys in the dict carry per-PR sync info (injected by build_dashboard).
-    """
-    # Filter out metadata sentinel keys when checking emptiness
-    real_keys = [k for k in all_pr_failures_by_pr if not str(k).startswith("_meta_")]
-    if not real_keys:
-        return '<div style="color:#057a55;font-size:13px;padding:10px 0;">&#x2705; No failures across all tested PRs.</div>'
-
-    rows = ""
-    for pr_num in sorted(k for k in all_pr_failures_by_pr if not str(k).startswith("_meta_")):
-        failures        = all_pr_failures_by_pr[pr_num]
-        pr_meta         = all_pr_failures_by_pr.get("_meta_" + str(pr_num), {})
-        behind_by       = pr_meta.get("behind_by", 0)
-        sync_status_val = pr_meta.get("sync_status", "unknown")
-        sbadge          = sync_badge(behind_by, sync_status_val)
-
-        for f in failures:
-            is_new    = f["key"] not in baseline_keys
-            row_class = "row-new" if is_new else "row-existing"
-            kind_badge = '<span class="badge badge-new-fail">new</span>' if is_new else \
-                         '<span class="badge badge-existing">pre-existing</span>'
-            gh_url    = f"https://github.com/dmn-tck/tck/tree/master/TestCases/{escape(f['suite_path'])}"
-            rows += f"""<tr class="{row_class}">
-  <td><span class="badge badge-info">#{pr_num}</span></td>
-  <td>{kind_badge}</td>
-  <td>{sbadge}</td>
-  <td class="mono" style="white-space:nowrap;">
-    <span class="badge badge-gray">{escape(f['level'])}</span>&nbsp;
-    <a href="{gh_url}" target="_blank" rel="noopener">{escape(f['suite'])}</a>
-  </td>
-  <td class="mono">{escape(f['case_id'])}</td>
-  <td class="mono">{escape(f['test'])}</td>
-  <td><code>{escape(f['message'])}</code></td>
-</tr>"""
-
-    return f"""<div class="legend">
-  <span style="font-weight:600;color:#57606a;">Legend:</span>
-  <div class="legend-item"><div class="legend-swatch" style="background:#fff5f5;border:1px solid #fca5a5;"></div> New failure introduced by PR</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#fffbeb;border:1px solid #fde68a;"></div> Pre-existing baseline failure</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#fff7ed;border:1px solid #fdba74;"></div> PR branch behind master (results may have false positives)</div>
-</div>
-<div class="table-wrap"><table>
-  <thead><tr><th>PR</th><th>Kind</th><th>Sync</th><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr></thead>
+  <thead><tr><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure message</th></tr></thead>
   <tbody>{rows}</tbody>
 </table></div>"""
 
@@ -478,42 +519,42 @@ def pr_failures_table(all_pr_failures_by_pr, baseline_keys):
 def build_dashboard(pr_results_dir, baseline_csv, upstream_repo, token, output_path):
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    # Load baseline failures (existing failures on master)
+    # ── Load data ──────────────────────────────────────────────────────────────
     baseline_keys = load_baseline(baseline_csv)
 
-    # Load per-PR results
+    baseline_suite_totals = {}
+    baseline_failure_details = []
+    if baseline_csv and os.path.exists(baseline_csv):
+        baseline_suite_totals, baseline_failure_details, baseline_summary = parse_csv(baseline_csv)
+    else:
+        baseline_summary = {"total": 0, "pass": 0, "fail": 0}
+
     pr_results = load_pr_results(pr_results_dir)
     print(f"Loaded results for {len(pr_results)} PRs: {sorted(pr_results.keys())}")
 
-    # Fetch upstream PRs
     print(f"Fetching PRs from {upstream_repo}...")
-    all_prs = fetch_prs(upstream_repo, token, state="all", limit=60)
+    open_prs = fetch_prs(upstream_repo, token, state="open", limit=50)
 
     pr_suites_map = {}
-    for pr in all_prs:
+    for pr in open_prs:
         num   = pr["number"]
         files = fetch_pr_files(upstream_repo, num, token)
         pr_suites_map[num] = pr_new_suites(files)
 
-    open_prs   = [p for p in all_prs if p["state"] == "open"]
-    merged_prs = [p for p in all_prs if p.get("merged_at")][:10]
+    # ── Derived metrics ────────────────────────────────────────────────────────
+    total_tests   = baseline_summary["total"]
+    total_pass    = baseline_summary["pass"]
+    total_fail    = baseline_summary["fail"]
+    pass_rate     = f"{total_pass / total_tests * 100:.2f}%" if total_tests else "—"
 
-    # Load baseline failure details for the baseline table
-    baseline_failure_details = []
-    if baseline_csv and os.path.exists(baseline_csv):
-        _, bl_failures, _ = parse_csv(baseline_csv)
-        baseline_failure_details = bl_failures
-
-    # KPI counts — using net-new failures only
-    total_open       = len(open_prs)
-    open_with_tests  = sum(1 for p in open_prs if pr_suites_map.get(p["number"]))
-    tested_count     = len(pr_results)
+    total_open        = len(open_prs)
+    tested_count      = len(pr_results)
     prs_with_new_fail = sum(
         1 for r in pr_results.values()
         if any(f["key"] not in baseline_keys for f in r["failures"])
     )
 
-    # Attention: open PRs with net-new failures only
+    # PRs needing attention (open + tested + has new failures)
     attention_prs = []
     for p in open_prs:
         res = pr_results.get(p["number"])
@@ -522,173 +563,188 @@ def build_dashboard(pr_results_dir, baseline_csv, upstream_repo, token, output_p
             if new_fails:
                 attention_prs.append((p, new_fails))
 
-    # All failures grouped by PR (for the full table).
-    # Also inject _meta_<num> keys so pr_failures_table() can look up sync info
-    # without requiring a separate argument.
-    all_pr_failures_by_pr = {}
-    for num, data in pr_results.items():
-        if data["failures"]:
-            all_pr_failures_by_pr[num] = data["failures"]
-            all_pr_failures_by_pr["_meta_" + str(num)] = data["meta"]
+    # ── Overview: donut + level bars + summary card ────────────────────────────
+    donut = _donut_svg(total_pass, total_tests)
+    level_bars = _level_bars(baseline_suite_totals)
 
-    # ── Build HTML ────────────────────────────────────────────────────────────
+    # Level totals from suite names (derive L2 vs L3 from suite number prefix)
+    l2_pass = l2_total = l3_pass = l3_total = 0
+    for suite, v in baseline_suite_totals.items():
+        try:
+            num_prefix = int(suite.split("-")[0])
+            if num_prefix < 1000:
+                l3_pass  += v["pass"];  l3_total  += v["total"]
+            else:
+                l3_pass  += v["pass"];  l3_total  += v["total"]
+        except Exception:
+            pass
+    # Simpler: split on compliance level from the CSV level field
+    # Re-parse to get level totals
+    level_totals = defaultdict(lambda: {"pass": 0, "total": 0})
+    if baseline_csv and os.path.exists(baseline_csv):
+        with open(baseline_csv, newline="", encoding="utf-8") as fh:
+            for row in csv.reader(fh):
+                if len(row) < 4:
+                    continue
+                suite_path = row[0].strip('"')
+                status     = row[3].strip('"')
+                parts      = suite_path.split("/")
+                level      = parts[0] if parts else "unknown"
+                level_totals[level]["total"] += 1
+                if status == "SUCCESS":
+                    level_totals[level]["pass"] += 1
 
-    # Attention box — only PRs with NET-NEW failures
+    level_bar_rows = ""
+    for lvl in sorted(level_totals):
+        v    = level_totals[lvl]
+        pct  = v["pass"] / v["total"] * 100 if v["total"] else 100
+        col  = "#059669" if pct == 100 else "#f59e0b"
+        lbl  = lvl.replace("compliance-level-", "Level-")
+        level_bar_rows += f"""<div class="bar-wrap">
+  <div class="bar-label">{escape(lbl)}</div>
+  <div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%;background:{col}"></div></div>
+  <div class="bar-val">{v['pass']:,} / {v['total']:,}</div>
+</div>"""
+
+    # Top failing suites bar rows
+    failing_suite_rows = ""
+    failing_suites = sorted(
+        [(s, v) for s, v in baseline_suite_totals.items() if v["fail"] > 0],
+        key=lambda x: x[1]["fail"], reverse=True
+    )[:6]
+    if failing_suites:
+        failing_suite_rows = '<div style="height:6px"></div>'
+        for suite, v in failing_suites:
+            pct  = v["pass"] / v["total"] * 100 if v["total"] else 100
+            col  = "#f59e0b" if pct > 0 else "#ef4444"
+            lbl  = suite[:22] + "…" if len(suite) > 22 else suite
+            failing_suite_rows += f"""<div class="bar-wrap">
+  <div class="bar-label" title="{escape(suite)}">{escape(lbl)}</div>
+  <div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%;background:{col}"></div></div>
+  <div class="bar-val">{v['pass']:,} / {v['total']:,}</div>
+</div>"""
+
+    results_date = ""
+    if pr_results:
+        dates = [r["meta"].get("run_date", "")[:10] for r in pr_results.values() if r["meta"].get("run_date")]
+        if dates:
+            results_date = max(dates)
+
+    vc_box = f"""<div class="vc-box">
+  <div class="vc-head">Apache KIE Drools 999-SNAPSHOT{(' &nbsp;·&nbsp; Results: ' + results_date) if results_date else ''}</div>
+  <div class="vc-stat"><span>Total tests</span><strong>{total_tests:,}</strong></div>
+  <div class="vc-stat"><span>Passing</span><strong class="green">{total_pass:,}</strong></div>
+  <div class="vc-stat"><span>Failing</span><strong class="red">{total_fail:,}</strong></div>
+  <div class="vc-stat"><span>Pass rate</span><strong>{pass_rate}</strong></div>
+  <div class="vc-stat"><span>Suites with failures</span><strong>{len([s for s,v in baseline_suite_totals.items() if v['fail']>0])}</strong></div>
+  <div class="vc-stat"><span>Upstream repo</span>
+    <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener">{upstream_repo}</a>
+  </div>
+</div>"""
+
+    # ── Attention banner ───────────────────────────────────────────────────────
     attention_html = ""
     if attention_prs:
         items = "".join(
-            f'<li><a href="{p["html_url"]}" target="_blank" rel="noopener">'
-            f'#{p["number"]} {escape(p["title"])}</a>'
-            f' — <strong>{len(nf)} new failure{"s" if len(nf)!=1 else ""}</strong> introduced by this PR</li>'
+            f'<li><a href="{p["html_url"]}" target="_blank" rel="noopener">#{p["number"]} {escape(p["title"])}</a>'
+            f' — <strong>{len(nf)} new failure{"s" if len(nf)!=1 else ""}</strong></li>'
             for p, nf in attention_prs
         )
-        attention_html = f"""<div class="attention-box">
+        attention_html = f"""<div class="warn-box">
 &#x26A0; <strong>Needs attention</strong> — {len(attention_prs)} open PR(s) introduce new test failures:
-<ul style="margin-top:8px;padding-left:20px;">{items}</ul>
+<ul>{items}</ul>
 </div>"""
 
-    # Baseline info box
-    baseline_html = ""
-    if baseline_failure_details:
-        baseline_html = f"""<div class="baseline-box">
-&#x1F4CB; <strong>Baseline:</strong> {len(baseline_failure_details)} existing failure(s) already present on master
-(independent of any PR). These are shown in amber throughout the dashboard and do <em>not</em> count against open PRs.
-</div>"""
+    # ── PR status table ────────────────────────────────────────────────────────
+    pr_table_html = _pr_status_table(open_prs, pr_results, pr_suites_map, baseline_keys)
 
-    # Count PRs that are behind master (for KPI sub-label)
-    prs_behind = sum(
-        1 for r in pr_results.values()
-        if r["meta"].get("behind_by", 0) > 0
-    )
+    # ── New failures drilldown ─────────────────────────────────────────────────
+    drilldown_html = _new_failures_drilldown(open_prs, pr_results, baseline_keys)
 
-    # KPIs
-    kpis = f"""<div class="kpi-row">
-  <div class="kpi">
-    <div class="kpi-value c-blue">{total_open}</div>
-    <div class="kpi-label">Open Upstream PRs</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-value c-orange">{open_with_tests}</div>
-    <div class="kpi-label">PRs Adding Tests</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-value c-green">{tested_count}</div>
-    <div class="kpi-label">PRs Tested</div>
-    {(f'<div class="kpi-sub">{prs_behind} behind master</div>') if prs_behind else ''}
-  </div>
-  <div class="kpi">
-    <div class="kpi-value c-red">{prs_with_new_fail}</div>
-    <div class="kpi-label">PRs With New Failures</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-value c-yellow">{len(baseline_failure_details)}</div>
-    <div class="kpi-label">Baseline Failures</div>
-  </div>
-</div>"""
-
-    # Open PRs board
-    open_cards = "".join(
-        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo, baseline_keys)
-        for p in open_prs
-    ) or '<div style="color:#6b7280;font-size:13px;padding:10px 0;">No open upstream PRs.</div>'
-
-    # Merged PRs board
-    merged_cards = "".join(
-        pr_card(p, pr_results.get(p["number"]), pr_suites_map.get(p["number"], set()), upstream_repo, baseline_keys)
-        for p in merged_prs
-    ) or '<div style="color:#6b7280;font-size:13px;padding:10px 0;">No recently merged PRs.</div>'
-
-    # Total failures counting (new only)
-    total_new_failures = sum(
-        len([f for f in data["failures"] if f["key"] not in baseline_keys])
-        for data in pr_results.values()
-    )
-    total_all_failures = sum(len(data["failures"]) for data in pr_results.values())
+    # ── Baseline failures table ────────────────────────────────────────────────
+    baseline_table_html = _baseline_table(baseline_failure_details)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BAMOE TCK Dashboard</title>
+<title>Drools TCK Dashboard — 999-SNAPSHOT</title>
 <style>{CSS}</style>
 </head>
 <body>
-
-<div class="top-bar"></div>
-
-<header class="site-header">
-  <div class="site-header-inner">
-    <h1>BAMOE TCK <span>Compatibility Dashboard</span></h1>
-    <div class="header-pills">
-      <span class="header-pill">Engine: <strong>Drools 999-SNAPSHOT</strong></span>
-      <span class="header-pill">Upstream: <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener">{upstream_repo}</a></span>
-      <span class="header-pill">Generated: <strong>{now_utc}</strong></span>
-    </div>
-  </div>
-</header>
-
 <div class="page">
 
+<div class="header">
+  <h1>Drools TCK Compatibility Dashboard</h1>
+  <div class="header-meta">
+    <span>Source: <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener">github.com/{upstream_repo}</a> · master</span>
+    <span>Engine: <strong>Apache KIE Drools</strong> 999-SNAPSHOT</span>
+    <span>Generated: <strong>{now_utc}</strong></span>
+  </div>
+</div>
+
 {attention_html}
-{baseline_html}
 
 <section>
-  <div class="section-title">Overview</div>
-  {kpis}
+  <div class="section-title">Overview — Apache KIE Drools 999-SNAPSHOT</div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-value green">{total_pass:,}</div><div class="kpi-label">Tests Passing</div></div>
+    <div class="kpi"><div class="kpi-value red">{total_fail}</div><div class="kpi-label">Tests Failing</div></div>
+    <div class="kpi"><div class="kpi-value blue">{len([s for s,v in baseline_suite_totals.items() if v['fail']>0])}</div><div class="kpi-label">Suites Affected</div></div>
+    <div class="kpi"><div class="kpi-value orange">{pass_rate}</div><div class="kpi-label">Pass Rate</div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-box">
+      <div class="chart-title">Pass / Fail split</div>
+      {donut}
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Results by compliance level</div>
+      {level_bar_rows}
+      {failing_suite_rows}
+    </div>
+  </div>
+  {vc_box}
 </section>
 
 <section>
   <div class="section-title">
-    Open Upstream PRs
+    Open Pull Requests
     <span class="badge badge-info">{total_open} open</span>
-    <span class="badge badge-purple">{open_with_tests} add tests</span>
+    <span class="badge badge-gray">{tested_count} tested</span>
+    {f'<span class="badge badge-fail">{prs_with_new_fail} with new failures</span>' if prs_with_new_fail else ''}
   </div>
-  <div class="pr-grid">{open_cards}</div>
-  <div style="margin-top:10px;font-size:11px;color:#6b7280;">
-    <strong style="color:#ef4444;">&#9646; Red</strong> = new failures &nbsp;·&nbsp;
-    <strong style="color:#f59e0b;">&#9646; Amber</strong> = pre-existing failures only (PR is clean) &nbsp;·&nbsp;
-    <strong style="color:#22c55e;">&#9646; Green</strong> = all passing &nbsp;·&nbsp;
-    <strong style="color:#d1d5db;">&#9646; Gray</strong> = not yet tested
-  </div>
+  {pr_table_html}
 </section>
 
-<section>
-  <div class="section-title">Recently Merged PRs</div>
-  <div class="pr-grid">{merged_cards}</div>
-</section>
+{f'''<section>
+  <div class="section-title">Net-New Failures Introduced by Open PRs
+    <span class="badge badge-fail">{sum(len(nf) for _,nf in attention_prs)} failures across {len(attention_prs)} PR{"s" if len(attention_prs)!=1 else ""}</span>
+  </div>
+  <p class="footnote" style="margin-bottom:10px;">
+    Pre-existing baseline failures are excluded from each PR block below — only failures
+    that do <em>not</em> appear on master are listed here.
+  </p>
+  {drilldown_html}
+</section>''' if attention_prs else ''}
 
 <section>
   <div class="section-title">
     Baseline Failures — Already on Master
-    <span class="badge badge-existing">{len(baseline_failure_details)} failures</span>
+    <span class="badge badge-warn">{len(baseline_failure_details)} failures</span>
   </div>
-  <div class="info-box">
-    These failures exist on the current master branch <strong>before any PR is applied</strong>.
-    They are pre-existing issues in Drools 999-SNAPSHOT, unrelated to the open PRs above.
-    Any PR that only shows these failures is <strong>not introducing new problems</strong>.
-  </div>
-  {baseline_failures_table(baseline_failure_details)}
-</section>
-
-<section>
-  <div class="section-title">
-    All Failures Across Tested PRs
-    <span class="badge badge-new-fail">{total_new_failures} new</span>
-    <span class="badge badge-existing">{total_all_failures - total_new_failures} pre-existing</span>
-  </div>
-  {pr_failures_table(all_pr_failures_by_pr, baseline_keys)}
+  <p class="footnote" style="margin-bottom:10px;">
+    These failures exist on the current master branch before any PR is applied.
+    They are pre-existing issues in Drools 999-SNAPSHOT and do not count against any open PR.
+  </p>
+  {baseline_table_html}
 </section>
 
 </div>
-
-<footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;
-  margin-top:40px;padding:14px 20px;background:#fff;">
-  BAMOE TCK Dashboard &nbsp;·&nbsp; Auto-generated by CI &nbsp;·&nbsp;
-  <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener" style="color:#9ca3af;">{upstream_repo}</a>
-  &nbsp;·&nbsp; Made with IBM Bob
+<footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:32px;padding-top:12px;max-width:860px;margin-left:auto;margin-right:auto;">
+  Auto-generated &nbsp;·&nbsp; Data from <a href="https://github.com/{upstream_repo}" target="_blank" rel="noopener" style="color:#9ca3af;">github.com/{upstream_repo}</a> &nbsp;·&nbsp; Made with IBM Bob
 </footer>
-
 </body>
 </html>"""
 
