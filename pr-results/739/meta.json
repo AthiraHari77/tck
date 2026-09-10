@@ -1,12 +1,13 @@
 {
   "pr_number": 739,
   "pr_title": "Add tests for imports with no prefix",
-  "run_date": "2026-09-09T13:54:33Z",
+  "run_date": "2026-09-10T07:53:59Z",
   "drools_sha": "456693c0d18c",
+  "head_sha": "21a3d36bec31e927f72a2f6dd653c8b8d0e88cfc",
   "total": 3419,
   "pass": 3413,
   "fail": 6,
-  "behind_by": 12,
+  "behind_by": 13,
   "sync_status": "diverged",
   "tested_as_synced": true,
   "merge_conflict": false
