@@ -1,12 +1,13 @@
 {
   "pr_number": 738,
   "pr_title": "Add test cases for unary tests in decision tables",
-  "run_date": "2026-09-09T13:55:57Z",
+  "run_date": "2026-09-10T07:55:07Z",
   "drools_sha": "456693c0d18c",
+  "head_sha": "ff0300ea2e1e3c972fcdb3001c0b49a981da3a67",
   "total": 3409,
   "pass": 3403,
   "fail": 6,
-  "behind_by": 12,
+  "behind_by": 13,
   "sync_status": "diverged",
   "tested_as_synced": true,
   "merge_conflict": false
