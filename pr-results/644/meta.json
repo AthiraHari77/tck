@@ -1,12 +1,13 @@
 {
   "pr_number": 644,
   "pr_title": "[DMN 1.6] FEEL Descendant Operator",
-  "run_date": "2026-09-09T14:04:41Z",
+  "run_date": "2026-09-10T08:02:53Z",
   "drools_sha": "456693c0d18c",
+  "head_sha": "0d7a024899e879aa2536d4c694989fd86555bbd7",
   "total": 3407,
   "pass": 3389,
   "fail": 18,
-  "behind_by": 109,
+  "behind_by": 110,
   "sync_status": "diverged",
   "tested_as_synced": true,
   "merge_conflict": false
