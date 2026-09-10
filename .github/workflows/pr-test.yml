@@ -11,9 +11,10 @@ name: "BAMOE TCK Dashboard — Test & Refresh"
 #   The correct solution is scheduled polling.
 #
 # TRIGGER 1 — schedule (daily at 02:00 UTC)
-#   Polls upstream for new/updated open PRs daily. Any PR not yet in
-#   pr-results/ gets tested. Already-tested PRs are skipped (no re-run).
-#   This is the primary automatic discovery mechanism for new upstream PRs.
+#   Polls upstream for new/updated open PRs daily. Tests any PR that either
+#   has no saved results yet OR whose head SHA has changed since the last run
+#   (i.e. the author pushed new commits). Already-tested, unchanged PRs are
+#   skipped. This is the primary automatic discovery and update mechanism.
 #
 # TRIGGER 2 — push to tck_dashboard
 #   Fires automatically whenever sync-upstream.yml merges new upstream master
@@ -53,6 +54,19 @@ on:
         required: false
         default: ''
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CONCURRENCY
+# ─────────────────────────────────────────────────────────────────────────────
+# Only one run of this workflow may be active at a time per branch.
+# cancel-in-progress: false means a second trigger queues rather than kills the
+# running job — important because both the daily schedule AND a sync-upstream
+# push can fire within the same minute, and we don't want to lose a 30-minute
+# Drools build just because a second run started.
+# ─────────────────────────────────────────────────────────────────────────────
+concurrency:
+  group: tck-dashboard
+  cancel-in-progress: false
+
 jobs:
   test-and-refresh:
     runs-on: ubuntu-latest
@@ -91,17 +105,34 @@ jobs:
               | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
 
             if [ "$EVENT" = "schedule" ]; then
-              # On schedule: filter to only PRs not yet tested (no saved results)
+              # On schedule: test PRs that are either new (no meta.json yet) OR
+              # whose head SHA has changed since we last tested them — meaning the
+              # author pushed new commits after the previous run.
               NEW_PRS=""
               for PR in $PR_LIST; do
                 if [ ! -f "pr-results/${PR}/meta.json" ]; then
+                  # Never tested before
                   NEW_PRS="$NEW_PRS $PR"
+                else
+                  # Already tested — check whether the PR's head SHA has moved
+                  LIVE_SHA=$(curl -s \
+                    -H "Authorization: Bearer $GH_TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
+                    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
+                    2>/dev/null || echo "")
+                  STORED_SHA=$(python3 -c "import sys,json; d=json.load(open('pr-results/${PR}/meta.json')); print(d.get('head_sha',''))" \
+                    2>/dev/null || echo "")
+                  if [ -n "$LIVE_SHA" ] && [ "$LIVE_SHA" != "$STORED_SHA" ]; then
+                    echo "PR #$PR head SHA changed ($STORED_SHA → $LIVE_SHA) — re-testing"
+                    NEW_PRS="$NEW_PRS $PR"
+                  fi
                 fi
               done
               NEW_PRS=$(echo $NEW_PRS | xargs)  # trim whitespace
               echo "pr_list=$NEW_PRS" >> "$GITHUB_OUTPUT"
               echo "should_test=$([ -n "$NEW_PRS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-              echo "Schedule mode: new PRs to test = '$NEW_PRS'"
+              echo "Schedule mode: PRs to test (new or updated) = '$NEW_PRS'"
             else
               # On push (sync): re-test all open PRs
               echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
@@ -256,8 +287,11 @@ jobs:
             git config user.email "ci@bamoe-dashboard.local"
             git config user.name  "BAMOE CI"
             MERGE_CONFLICT=false
-            if git merge master --no-edit --no-ff 2>&1 | grep -q "CONFLICT"; then
-              echo "WARNING: PR #$PR has merge conflicts with master — testing unmerged branch"
+            MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1)
+            MERGE_EXIT=$?
+            if echo "$MERGE_OUT" | grep -q "CONFLICT" || [ $MERGE_EXIT -ne 0 ]; then
+              echo "WARNING: PR #$PR — merge failed (exit=$MERGE_EXIT); testing unmerged branch"
+              echo "$MERGE_OUT"
               git merge --abort 2>/dev/null || true
               MERGE_CONFLICT=true
             else
@@ -290,10 +324,11 @@ jobs:
             cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
             rm -rf "$WORK_DIR"   # discard — nothing merged into tck_dashboard
 
-            # Count results
-            TOTAL=$(wc -l < pr-results/${PR}/tck_results.csv | tr -d ' ')
-            PASS=$(grep -c "SUCCESS"                pr-results/${PR}/tck_results.csv || true)
-            FAIL=$(grep -c 'ERROR\|FAILURE\|SKIPPED' pr-results/${PR}/tck_results.csv || true)
+            # Count results via scripts/count_csv.py — uses the same csv.reader()
+            # logic as parse_csv() in generate_dashboard.py, so bash-side counts
+            # are provably identical to what the dashboard reports regardless of
+            # quoted commas or escaped double-quotes in the message column.
+            read -r TOTAL PASS FAIL < <(python3 scripts/count_csv.py "pr-results/${PR}/tck_results.csv")
 
             # Fetch PR details from upstream API (title + sync status)
             PR_JSON=$(curl -s \
@@ -348,6 +383,7 @@ jobs:
             "pr_title": "$TITLE",
             "run_date": "$RUN_DATE",
             "drools_sha": "$DROOLS_SHA",
+            "head_sha": "$PR_HEAD_SHA",
             "total": $TOTAL,
             "pass": $PASS,
             "fail": $FAIL,
@@ -358,6 +394,45 @@ jobs:
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
+
+            # ── f) Commit results for this PR immediately ────────────────────
+            #    Incremental saves protect against timeout or runner failure
+            #    mid-loop discarding all work accumulated so far.
+            #
+            #    Push with rebase-retry: the concurrency group ensures only one
+            #    run is active at a time, but a queued run will see commits made
+            #    by the previous run and needs to rebase before its push succeeds.
+            #    Three attempts cover any realistic lag.
+            #
+            #    Failure path is intentionally loud: if the rebase itself conflicts
+            #    (two concurrent runs testing the same PR is the realistic trigger),
+            #    we write to $GITHUB_STEP_SUMMARY and exit 1 so the run fails
+            #    visibly rather than silently under-persisting results.
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pr-results/${PR}/
+            git diff --cached --quiet && true || \
+              git commit -m "dashboard: results for PR #${PR} @ $(date -u +%Y-%m-%d)"
+            PUSH_OK=false
+            for attempt in 1 2 3; do
+              if git push origin tck_dashboard; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push attempt $attempt failed — rebasing and retrying"
+              if ! git pull --rebase origin tck_dashboard; then
+                git rebase --abort 2>/dev/null || true
+                echo "## ❌ Push failed for PR #${PR}" >> "$GITHUB_STEP_SUMMARY"
+                echo "Rebase conflict on attempt ${attempt}. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
+                echo "Re-run this workflow manually to retry." >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+            done
+            if [ "$PUSH_OK" = "false" ]; then
+              echo "## ❌ Push failed for PR #${PR} after 3 attempts" >> "$GITHUB_STEP_SUMMARY"
+              echo "All 3 push attempts were rejected. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
           done
 
       # ── 8. Set up Python ────────────────────────────────────────────────────
