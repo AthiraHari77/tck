@@ -10,11 +10,13 @@ name: "BAMOE TCK Dashboard — Test & Refresh"
 #   native GitHub event that fires in your repo when someone opens a PR there.
 #   The correct solution is scheduled polling.
 #
-# TRIGGER 1 — schedule (daily at 02:00 UTC)
-#   Polls upstream for new/updated open PRs daily. Tests any PR that either
-#   has no saved results yet OR whose head SHA has changed since the last run
-#   (i.e. the author pushed new commits). Already-tested, unchanged PRs are
-#   skipped. This is the primary automatic discovery and update mechanism.
+# TRIGGER 1 — schedule (hourly)
+#   Polls upstream for new/updated open PRs every hour. Tests any PR that
+#   either has no saved results yet OR whose head SHA has changed since the
+#   last run (i.e. the author pushed new commits). Already-tested, unchanged
+#   PRs are skipped in under a minute. This is the primary automatic discovery
+#   and update mechanism — hourly polling is the closest approximation to
+#   real-time available without write access to dmn-tck/tck.
 #
 # TRIGGER 2 — push to tck_dashboard
 #   Fires automatically whenever sync-upstream.yml merges new upstream master
@@ -29,9 +31,14 @@ name: "BAMOE TCK Dashboard — Test & Refresh"
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  # TRIGGER 1: Daily poll for new upstream PRs at 02:00 UTC
+  # TRIGGER 1: Hourly poll for new/updated upstream PRs.
+  # True real-time triggering isn't possible across repos — GitHub's
+  # pull_request event only fires for PRs opened against THIS repo.
+  # Hourly polling is the lightest practical alternative: the schedule
+  # run exits in under a minute when no PR is new or updated (SHA check),
+  # so the cost of running it 24x/day is negligible.
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 * * * *'
 
   # TRIGGER 2: Fires when sync-upstream.yml pushes merged upstream changes
   push:
