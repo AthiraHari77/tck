@@ -1,12 +1,13 @@
 {
   "pr_number": 696,
   "pr_title": "[DMN 1.6] Single parameter number function-TCK test cases",
-  "run_date": "2026-09-09T14:02:13Z",
+  "run_date": "2026-09-10T08:00:41Z",
   "drools_sha": "456693c0d18c",
+  "head_sha": "4e9847666a33e68ce00fd5321853292036beb7ae",
   "total": 3397,
   "pass": 3394,
   "fail": 3,
-  "behind_by": 65,
+  "behind_by": 66,
   "sync_status": "diverged",
   "tested_as_synced": true,
   "merge_conflict": false
