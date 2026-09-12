@@ -1,0 +1,14 @@
+{
+  "pr_number": 753,
+  "pr_title": "Add test cases for imported child inputs and decisions.",
+  "run_date": "2026-09-10T07:50:36Z",
+  "drools_sha": "456693c0d18c",
+  "head_sha": "fbf4dee432dc3f40721e81396129818cb61d850e",
+  "total": 3393,
+  "pass": 3388,
+  "fail": 5,
+  "behind_by": 1,
+  "sync_status": "diverged",
+  "tested_as_synced": true,
+  "merge_conflict": false
+}

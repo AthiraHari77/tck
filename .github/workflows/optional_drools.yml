@@ -1,7 +1,14 @@
 name: "[OPTIONAL] Drools Runner"
 
 on:
-  [ push, pull_request ]
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      upstream_pr:
+        description: 'Upstream dmn-tck/tck PR number to test (leave blank to test current branch as-is)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -19,8 +26,18 @@ jobs:
         path: ~/.m2
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
+    - name: Fetch and merge upstream PR branch (if PR number supplied)
+      if: ${{ github.event.inputs.upstream_pr != '' }}
+      run: |
+        PR=${{ github.event.inputs.upstream_pr }}
+        echo "Fetching upstream dmn-tck/tck PR #$PR"
+        git remote add upstream https://github.com/dmn-tck/tck.git || true
+        git fetch upstream pull/${PR}/head:upstream-pr-${PR}
+        git merge --no-edit upstream-pr-${PR}
+        echo "Merged upstream PR #$PR on top of current branch"
+
     - name: Run OPTIONAL Drools Runner
       # It is never possible to make a green PR check running tests, because new tests for new
-      # features that may not be yet in the engine can get merged regularly. So ignoring failures, but
-      # still running tests to have a list of potential failures.
+      # features that may not be yet in the engine can get merged separately. So ignoring failures,
+      # but still running tests to have a list of potential failures.
       run: cd runners && mvn verify --batch-mode --update-snapshots -Pdrools -Dmaven.test.failure.ignore=true
