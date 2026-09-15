@@ -1,0 +1,475 @@
+name: "BAMOE TCK Dashboard — Test & Refresh"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER DESIGN
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHY NOT on:pull_request?
+#   GitHub's pull_request event only fires for PRs opened against THIS repo.
+#   The upstream dmn-tck/tck is a completely separate repository — there is no
+#   native GitHub event that fires in your repo when someone opens a PR there.
+#   The correct solution is scheduled polling.
+#
+# TRIGGER 1 — schedule (hourly)
+#   Polls upstream for new/updated open PRs every hour. Tests any PR that
+#   either has no saved results yet OR whose head SHA has changed since the
+#   last run (i.e. the author pushed new commits). Already-tested, unchanged
+#   PRs are skipped in under a minute. This is the primary automatic discovery
+#   and update mechanism — hourly polling is the closest approximation to
+#   real-time available without write access to dmn-tck/tck.
+#
+# TRIGGER 2 — push to tck_dashboard
+#   Fires automatically whenever sync-upstream.yml merges new upstream master
+#   changes into this branch. Runs a full "all open PRs" test so the dashboard
+#   reflects the latest merged state of each PR against the freshest test cases.
+#
+# TRIGGER 3 — workflow_dispatch (manual)
+#   Three manual modes (see inputs below):
+#     - specific PR number  → test that PR only
+#     - "all"               → test all currently open upstream PRs
+#     - blank               → just refresh dashboard from saved results
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # TRIGGER 1: Hourly poll for new/updated upstream PRs.
+  # True real-time triggering isn't possible across repos — GitHub's
+  # pull_request event only fires for PRs opened against THIS repo.
+  # Hourly polling is the lightest practical alternative: the schedule
+  # run exits in under a minute when no PR is new or updated (SHA check),
+  # so the cost of running it 24x/day is negligible.
+  schedule:
+    - cron: '0 * * * *'
+
+  # TRIGGER 2: Fires when sync-upstream.yml pushes merged upstream changes
+  push:
+    branches:
+      - tck_dashboard
+    paths:
+      # Only react to actual test case or runner changes, not dashboard HTML commits
+      - 'TestCases/**'
+      - 'runners/**'
+
+  # TRIGGER 3: Manual trigger with mode selection
+  workflow_dispatch:
+    inputs:
+      upstream_pr:
+        description: 'PR number (e.g. 717), "all" for all open PRs, or blank to just refresh dashboard'
+        required: false
+        default: ''
+      pr_title:
+        description: 'Short title label (only used for a single PR number)'
+        required: false
+        default: ''
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONCURRENCY
+# ─────────────────────────────────────────────────────────────────────────────
+# Only one run of this workflow may be active at a time per branch.
+# cancel-in-progress: false means a second trigger queues rather than kills the
+# running job — important because both the daily schedule AND a sync-upstream
+# push can fire within the same minute, and we don't want to lose a 30-minute
+# Drools build just because a second run started.
+# ─────────────────────────────────────────────────────────────────────────────
+concurrency:
+  group: tck-dashboard
+  cancel-in-progress: false
+
+jobs:
+  test-and-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      # ── 1. Checkout tck_dashboard branch ────────────────────────────────────
+      - name: Checkout tck_dashboard
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.DASHBOARD_PAT }}
+          ref: tck_dashboard
+          fetch-depth: 0
+
+      # ── 2. Determine run mode ────────────────────────────────────────────────
+      # schedule + push triggers always run in "all open PRs" mode.
+      # workflow_dispatch respects the input field.
+      - name: Determine run mode
+        id: mode
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          INPUT="${{ github.event.inputs.upstream_pr }}"
+          EVENT="${{ github.event_name }}"
+
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "push" ]; then
+            # Automatic triggers: discover all open upstream PRs.
+            # For schedule: only test PRs not yet in pr-results/ (new ones).
+            # For push: re-test all open PRs against updated test cases.
+            echo "trigger=$EVENT" >> "$GITHUB_OUTPUT"
+
+            PR_LIST=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
+              | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
+
+            if [ "$EVENT" = "schedule" ]; then
+              # On schedule: test PRs that are either new (no meta.json yet) OR
+              # whose head SHA has changed since we last tested them — meaning the
+              # author pushed new commits after the previous run.
+              NEW_PRS=""
+              for PR in $PR_LIST; do
+                if [ ! -f "pr-results/${PR}/meta.json" ]; then
+                  # Never tested before
+                  NEW_PRS="$NEW_PRS $PR"
+                else
+                  # Already tested — check whether the PR's head SHA has moved
+                  LIVE_SHA=$(curl -s \
+                    -H "Authorization: Bearer $GH_TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
+                    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
+                    2>/dev/null || echo "")
+                  STORED_SHA=$(python3 -c "import sys,json; d=json.load(open('pr-results/${PR}/meta.json')); print(d.get('head_sha',''))" \
+                    2>/dev/null || echo "")
+                  if [ -n "$LIVE_SHA" ] && [ "$LIVE_SHA" != "$STORED_SHA" ]; then
+                    echo "PR #$PR head SHA changed ($STORED_SHA → $LIVE_SHA) — re-testing"
+                    NEW_PRS="$NEW_PRS $PR"
+                  fi
+                fi
+              done
+              NEW_PRS=$(echo $NEW_PRS | xargs)  # trim whitespace
+              echo "pr_list=$NEW_PRS" >> "$GITHUB_OUTPUT"
+              echo "should_test=$([ -n "$NEW_PRS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+              echo "Schedule mode: PRs to test (new or updated) = '$NEW_PRS'"
+            else
+              # On push (sync): re-test all open PRs
+              echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
+              echo "should_test=$([ -n "$PR_LIST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+              echo "Push mode: re-testing all open PRs = '$PR_LIST'"
+            fi
+
+          elif [ -n "$INPUT" ] && [ "$INPUT" != "all" ]; then
+            # Manual: single PR number
+            echo "trigger=single" >> "$GITHUB_OUTPUT"
+            echo "pr_list=$INPUT"  >> "$GITHUB_OUTPUT"
+            echo "should_test=true" >> "$GITHUB_OUTPUT"
+            echo "Manual mode: single PR = $INPUT"
+
+          elif [ "$INPUT" = "all" ]; then
+            # Manual: all open PRs
+            PR_LIST=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
+              | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
+            echo "trigger=all" >> "$GITHUB_OUTPUT"
+            echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
+            echo "should_test=$([ -n "$PR_LIST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+            echo "Manual mode: all open PRs = '$PR_LIST'"
+
+          else
+            # Manual: blank input → dashboard refresh only, no testing
+            echo "trigger=refresh" >> "$GITHUB_OUTPUT"
+            echo "pr_list=" >> "$GITHUB_OUTPUT"
+            echo "should_test=false" >> "$GITHUB_OUTPUT"
+            echo "Manual mode: dashboard refresh only"
+          fi
+
+      # ── 3. Set up Java 17 (only when testing) ───────────────────────────────
+      - name: Set up JDK 17
+        if: steps.mode.outputs.should_test == 'true'
+        uses: actions/setup-java@v4.7.1
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── 4. Get Drools HEAD SHA for Maven cache key ───────────────────────────
+      - name: Get Drools HEAD SHA
+        if: steps.mode.outputs.should_test == 'true'
+        id: drools-sha
+        run: |
+          SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD \
+                | cut -f1 | cut -c1-12)
+          echo "sha=$SHA"          >> "$GITHUB_OUTPUT"
+          echo "DROOLS_SHA=$SHA"   >> "$GITHUB_ENV"
+
+      # ── 5. Cache Maven ~/.m2 ────────────────────────────────────────────────
+      - name: Cache Maven repository
+        if: steps.mode.outputs.should_test == 'true'
+        uses: actions/cache@v4.2.3
+        with:
+          path: ~/.m2/repository
+          key: m2-drools-${{ steps.drools-sha.outputs.sha }}
+          restore-keys: m2-drools-
+
+      # ── 6. Build Drools 999-SNAPSHOT from source ────────────────────────────
+      #
+      # The TCK runner only needs kie-dmn-api and kie-dmn-core.
+      # Building the entire incubator-kie-drools repo triggers Quarkus extension
+      # builds that require Kogito artifacts from a separate repo (incubator-kie-
+      # kogito-runtimes) — which aren't available in CI.
+      #
+      # Solution: build only the DMN module subtree using -pl (project list) with
+      # -am (also make) to include all required upstream modules, and skip all
+      # Quarkus/extensions modules with -pl !<module>.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Clone apache/incubator-kie-drools
+        if: steps.mode.outputs.should_test == 'true'
+        run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
+
+      - name: Build Drools DMN modules only (kie-dmn-api + kie-dmn-core)
+        if: steps.mode.outputs.should_test == 'true'
+        working-directory: drools-src
+        run: |
+          mvn install \
+            --batch-mode \
+            -DskipTests \
+            -Dcheckstyle.skip=true \
+            -Denforcer.skip=true \
+            -Dformatter.skip=true \
+            -Dquarkus.build.skip=true \
+            -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
+            -am \
+            -T 2C \
+            -q
+
+      # ── 7. Test each PR — SAFE ISOLATED CHECKOUT (no merge) ─────────────────
+      #
+      # BUG FIX: The previous implementation used `git merge` which would
+      # permanently merge the upstream PR branch into tck_dashboard. This is
+      # wrong — an open PR must never be merged into the base branch.
+      #
+      # CORRECT APPROACH: For each PR we:
+      #   a) Clone the upstream repo into a fresh temp directory (upstream-tck/)
+      #   b) Fetch the PR's head ref into that clone
+      #   c) Check out that PR branch in the clone — fully isolated from this repo
+      #   d) Run the TCK runner inside that temp clone
+      #   e) Copy only the results CSV back — discard the temp clone
+      #
+      # This means: nothing from the upstream PR ever touches tck_dashboard.
+      # The working tree of this repo is never modified during testing.
+      # ─────────────────────────────────────────────────────────────────────────
+      - name: Test each PR in isolated workspace
+        if: steps.mode.outputs.should_test == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+          PR_LIST: ${{ steps.mode.outputs.pr_list }}
+        run: |
+          for PR in $PR_LIST; do
+            echo "════════════════════════════════════════════"
+            echo "  Testing upstream PR #$PR (isolated)"
+            echo "════════════════════════════════════════════"
+
+            # ── a) Clone upstream tck and immediately fetch the PR ref ───────
+            #    We do NOT use --depth 1 here because shallow clones cannot
+            #    fetch arbitrary refs like pull/<n>/head. We use --no-tags and
+            #    a single-branch clone of master for speed, then fetch the PR.
+            WORK_DIR="upstream-tck-pr-${PR}"
+            rm -rf "$WORK_DIR"
+            git clone --no-tags --single-branch --branch master \
+              https://github.com/dmn-tck/tck.git "$WORK_DIR"
+
+            # ── b) Fetch the PR's head ref into the temp clone ───────────────
+            #    pull/<number>/head is always available for open PRs.
+            #    We fetch it into a local branch named pr-<N> inside the clone.
+            cd "$WORK_DIR"
+            git fetch origin pull/${PR}/head:pr-${PR} || {
+              echo "WARNING: Could not fetch PR #$PR — skipping"
+              cd ..
+              rm -rf "$WORK_DIR"
+              continue
+            }
+
+            # ── c) Checkout the PR branch, then locally merge master ─────────
+            #    We check out the PR branch and immediately merge master into it
+            #    locally. This gives us a "what would failing look like if the
+            #    author synced today" view — eliminating false positives from
+            #    stale branches — without ever touching the author's remote.
+            #    The entire WORK_DIR is discarded after results are copied, so
+            #    this merge never leaves this machine.
+            #
+            #    If the merge has conflicts (rare for TestCases-only PRs), we
+            #    abort and fall back to testing the unmerged branch, recording
+            #    merge_conflict=true in meta.json so the dashboard can flag it.
+            git checkout pr-${PR}
+            git config user.email "ci@bamoe-dashboard.local"
+            git config user.name  "BAMOE CI"
+            MERGE_CONFLICT=false
+            MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1)
+            MERGE_EXIT=$?
+            if echo "$MERGE_OUT" | grep -q "CONFLICT" || [ $MERGE_EXIT -ne 0 ]; then
+              echo "WARNING: PR #$PR — merge failed (exit=$MERGE_EXIT); testing unmerged branch"
+              echo "$MERGE_OUT"
+              git merge --abort 2>/dev/null || true
+              MERGE_CONFLICT=true
+            else
+              echo "PR #$PR — local merge of master succeeded (ephemeral, never pushed)"
+            fi
+            cd ..
+
+            # ── d) Run TCK runner inside the temp clone ──────────────────────
+            #    The runner reads TestCases/ from the working tree (temp clone)
+            #    and writes tck_results.csv to TestResults/Drools/*/
+            cd "$WORK_DIR/runners"
+            mvn verify \
+              --batch-mode \
+              --update-snapshots \
+              -Pdrools \
+              -Dmaven.test.failure.ignore=true
+            cd ../..
+
+            # ── e) Copy results back, discard temp clone ─────────────────────
+            RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            mkdir -p pr-results/${PR}
+            RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
+
+            if [ -z "$RESULT_CSV" ]; then
+              echo "WARNING: No tck_results.csv found for PR #$PR — skipping"
+              rm -rf "$WORK_DIR"
+              continue
+            fi
+
+            cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
+            rm -rf "$WORK_DIR"   # discard — nothing merged into tck_dashboard
+
+            # Count results via scripts/count_csv.py — uses the same csv.reader()
+            # logic as parse_csv() in generate_dashboard.py, so bash-side counts
+            # are provably identical to what the dashboard reports regardless of
+            # quoted commas or escaped double-quotes in the message column.
+            read -r TOTAL PASS FAIL < <(python3 scripts/count_csv.py "pr-results/${PR}/tck_results.csv")
+
+            # Fetch PR details from upstream API (title + sync status)
+            PR_JSON=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}")
+
+            TITLE=$(echo "$PR_JSON" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('title',''))" \
+              2>/dev/null || echo "PR #${PR}")
+
+            # Check how many commits the PR branch is BEHIND upstream master.
+            # GitHub API returns: {"ahead_by": N, "behind_by": N, "status": "ahead|behind|diverged|identical"}
+            # "behind_by" = number of commits on master that the PR branch has NOT merged.
+            # If behind_by > 0, test results may include false positives from stale state.
+            PR_HEAD_SHA=$(echo "$PR_JSON" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
+              2>/dev/null || echo "")
+            PR_BASE_SHA=$(echo "$PR_JSON" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('base',{}).get('sha',''))" \
+              2>/dev/null || echo "")
+
+            BEHIND_BY=0
+            SYNC_STATUS="unknown"
+            if [ -n "$PR_HEAD_SHA" ] && [ -n "$PR_BASE_SHA" ]; then
+              COMPARE_JSON=$(curl -s \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/dmn-tck/tck/compare/master...${PR_HEAD_SHA}")
+              BEHIND_BY=$(echo "$COMPARE_JSON" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('behind_by', 0))" \
+                2>/dev/null || echo "0")
+              SYNC_STATUS=$(echo "$COMPARE_JSON" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
+                2>/dev/null || echo "unknown")
+            fi
+
+            echo "PR #${PR} sync status: $SYNC_STATUS (behind_by=$BEHIND_BY)"
+
+            # Write metadata — record whether results are from a merged view
+            # tested_as_synced=true  → master was locally merged before testing
+            #                          (results reflect "post-sync" state)
+            # tested_as_synced=false → merge had conflicts; tested raw PR branch
+            #                          (results may include noise from stale state)
+            TESTED_AS_SYNCED=true
+            if [ "$MERGE_CONFLICT" = "true" ]; then
+              TESTED_AS_SYNCED=false
+            fi
+            cat > pr-results/${PR}/meta.json << EOF
+          {
+            "pr_number": $PR,
+            "pr_title": "$TITLE",
+            "run_date": "$RUN_DATE",
+            "drools_sha": "$DROOLS_SHA",
+            "head_sha": "$PR_HEAD_SHA",
+            "total": $TOTAL,
+            "pass": $PASS,
+            "fail": $FAIL,
+            "behind_by": $BEHIND_BY,
+            "sync_status": "$SYNC_STATUS",
+            "tested_as_synced": $TESTED_AS_SYNCED,
+            "merge_conflict": $MERGE_CONFLICT
+          }
+          EOF
+            echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
+
+            # ── f) Commit results for this PR immediately ────────────────────
+            #    Incremental saves protect against timeout or runner failure
+            #    mid-loop discarding all work accumulated so far.
+            #
+            #    Push with rebase-retry: the concurrency group ensures only one
+            #    run is active at a time, but a queued run will see commits made
+            #    by the previous run and needs to rebase before its push succeeds.
+            #    Three attempts cover any realistic lag.
+            #
+            #    Failure path is intentionally loud: if the rebase itself conflicts
+            #    (two concurrent runs testing the same PR is the realistic trigger),
+            #    we write to $GITHUB_STEP_SUMMARY and exit 1 so the run fails
+            #    visibly rather than silently under-persisting results.
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pr-results/${PR}/
+            git diff --cached --quiet && true || \
+              git commit -m "dashboard: results for PR #${PR} @ $(date -u +%Y-%m-%d)"
+            PUSH_OK=false
+            for attempt in 1 2 3; do
+              if git push origin tck_dashboard; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push attempt $attempt failed — rebasing and retrying"
+              if ! git pull --rebase origin tck_dashboard; then
+                git rebase --abort 2>/dev/null || true
+                echo "## ❌ Push failed for PR #${PR}" >> "$GITHUB_STEP_SUMMARY"
+                echo "Rebase conflict on attempt ${attempt}. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
+                echo "Re-run this workflow manually to retry." >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+            done
+            if [ "$PUSH_OK" = "false" ]; then
+              echo "## ❌ Push failed for PR #${PR} after 3 attempts" >> "$GITHUB_STEP_SUMMARY"
+              echo "All 3 push attempts were rejected. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
+
+      # ── 8. Set up Python ────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install requests
+
+      # ── 9. Regenerate dashboard (ALWAYS runs regardless of trigger) ──────────
+      - name: Generate dashboard
+        env:
+          GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          python3 scripts/generate_dashboard.py \
+            --pr-results-dir pr-results \
+            --baseline-csv   TestResults/Drools/999-SNAPSHOT/tck_results.csv \
+            --upstream-repo  dmn-tck/tck \
+            --token          "$GITHUB_TOKEN" \
+            --output         docs/drools-dashboard.html
+
+      # ── 10. Commit and push results + dashboard ──────────────────────────────
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          [ -d pr-results ] && git add pr-results/ || true
+          git add docs/drools-dashboard.html
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
+          git push origin tck_dashboard

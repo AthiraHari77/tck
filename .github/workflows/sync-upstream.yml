@@ -1,0 +1,33 @@
+name: "Sync Upstream Master"
+
+# Pulls latest changes from upstream dmn-tck/tck master into this fork daily.
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 01:00 UTC daily
+  workflow_dispatch:        # allow manual trigger anytime
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DASHBOARD_PAT }}
+          ref: tck_dashboard
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote and sync
+        run: |
+          git remote add upstream https://github.com/dmn-tck/tck.git || true
+          git fetch upstream master
+          git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)"
+
+      - name: Push synced branch
+        run: git push origin tck_dashboard
