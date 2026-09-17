@@ -1,7 +1,12 @@
 name: "[OPTIONAL] jDMN Runner"
 
 on:
-  [ push, pull_request ]
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:

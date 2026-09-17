@@ -1,7 +1,12 @@
 name: "[OPTIONAL] Camunda DMN-Scala Runner"
 
 on:
-  [ push, pull_request ]
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:
