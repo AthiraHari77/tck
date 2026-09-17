@@ -1,6 +1,9 @@
 name: "Sync Upstream Master"
 
 # Pulls latest changes from upstream dmn-tck/tck master into this fork daily.
+# If master has changed, also re-runs Drools against the fresh master so that
+# the baseline CSV always reflects the current state of upstream master.
+# This prevents merged PRs' new failures from being mis-reported as PR regressions.
 
 on:
   schedule:
@@ -10,6 +13,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -24,10 +28,93 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Add upstream remote and sync
+        id: sync
         run: |
           git remote add upstream https://github.com/dmn-tck/tck.git || true
           git fetch upstream master
+
+          # Record whether master has actually moved since our last sync.
+          # If it hasn't, there is no need to re-run the baseline.
+          BEFORE=$(git rev-parse HEAD)
           git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)"
+          AFTER=$(git rev-parse HEAD)
+
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "master_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new upstream commits — skipping baseline refresh."
+          else
+            echo "master_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream master moved ($BEFORE → $AFTER) — baseline refresh needed."
+          fi
 
       - name: Push synced branch
         run: git push origin tck_dashboard
+
+      # ── Re-run Drools baseline only when upstream master has new commits ──────
+      - name: Get Drools HEAD SHA
+        if: steps.sync.outputs.master_changed == 'true'
+        id: drools-sha
+        run: |
+          SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD \
+                | cut -f1 | cut -c1-12)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Maven repository
+        if: steps.sync.outputs.master_changed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-drools-${{ steps.drools-sha.outputs.sha }}
+          restore-keys: m2-drools-
+
+      - name: Set up JDK 17
+        if: steps.sync.outputs.master_changed == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Clone apache/incubator-kie-drools
+        if: steps.sync.outputs.master_changed == 'true'
+        run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
+
+      - name: Build Drools DMN modules only (kie-dmn-api + kie-dmn-core)
+        if: steps.sync.outputs.master_changed == 'true'
+        working-directory: drools-src
+        run: |
+          mvn install \
+            --batch-mode \
+            -DskipTests \
+            -Dcheckstyle.skip=true \
+            -Denforcer.skip=true \
+            -Dformatter.skip=true \
+            -Dquarkus.build.skip=true \
+            -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
+            -am \
+            -T 2C \
+            -q
+
+      - name: Run Drools TCK against fresh master (update baseline)
+        if: steps.sync.outputs.master_changed == 'true'
+        run: |
+          mvn verify \
+            --batch-mode \
+            --update-snapshots \
+            -Pdrools \
+            -Dmaven.test.failure.ignore=true \
+            --file runners/pom.xml
+
+      - name: Commit updated baseline CSV
+        if: steps.sync.outputs.master_changed == 'true'
+        run: |
+          # The runner writes results into TestResults/Drools/999-SNAPSHOT/
+          RESULT_CSV=$(find TestResults/Drools -name "tck_results.csv" | head -1)
+          if [ -z "$RESULT_CSV" ]; then
+            echo "WARNING: No tck_results.csv produced — baseline not updated."
+            exit 0
+          fi
+          cp "$RESULT_CSV" TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          git add TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          git diff --cached --quiet && echo "Baseline unchanged." || \
+            git commit -m "baseline: refresh after upstream master sync $(date -u +%Y-%m-%d)"
+          git push origin tck_dashboard
