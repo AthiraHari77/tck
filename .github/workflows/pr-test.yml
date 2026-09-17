@@ -73,10 +73,10 @@ jobs:
           ref: tck_dashboard
           fetch-depth: 0
 
-      # ── 2. Sync upstream master (schedule only; skip on manual dispatch) ────
+      # ── 2. Sync upstream master (schedule + manual dispatch) ────────────────
       - name: Sync upstream master
         id: sync
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
