@@ -1,7 +1,7 @@
 {
   "pr_number": 740,
   "pr_title": "Add tests for imports with prefix",
-  "run_date": "2026-09-17T12:44:26Z",
+  "run_date": "2026-09-17T13:12:08Z",
   "drools_sha": "4e3727fab403",
   "head_sha": "c8b2a0cc3c53a21424e06527e3bb222678973766",
   "total": 3435,
