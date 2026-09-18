@@ -1,8 +1,8 @@
 {
   "pr_number": 737,
   "pr_title": "Add test cases for imports with two inputs with same name",
-  "run_date": "2026-09-17T18:22:14Z",
-  "drools_sha": "4e3727fab403",
+  "run_date": "2026-09-18T06:30:42Z",
+  "drools_sha": "48c37ee4a763",
   "head_sha": "d89e5518a2f7d55f42bbe1b4ce8a59383a9c8bd6",
   "total": 3409,
   "pass": 3398,
