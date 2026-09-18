@@ -1,8 +1,8 @@
 {
   "pr_number": 654,
   "pr_title": "[DMN 1.6] Date / Time value accessor",
-  "run_date": "2026-09-17T18:25:29Z",
-  "drools_sha": "4e3727fab403",
+  "run_date": "2026-09-18T06:33:39Z",
+  "drools_sha": "48c37ee4a763",
   "head_sha": "35b352c596cc217e5e5131c700339845d89728f8",
   "total": 3414,
   "pass": 3405,
