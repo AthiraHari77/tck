@@ -256,11 +256,12 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          RESULT_CSV=$(find TestResults/Drools -name "tck_results.csv" | head -1)
-          if [ -z "$RESULT_CSV" ]; then
+          # The runner writes directly into TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          # so no cp needed — just verify the file exists then commit it in place.
+          RESULT_CSV="TestResults/Drools/999-SNAPSHOT/tck_results.csv"
+          if [ ! -f "$RESULT_CSV" ]; then
             echo "WARNING: No tck_results.csv produced — baseline not updated."
           else
-            cp "$RESULT_CSV" TestResults/Drools/999-SNAPSHOT/tck_results.csv
             # Record the upstream master SHA this baseline was built against
             git rev-parse upstream/master > TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
             git add TestResults/Drools/999-SNAPSHOT/tck_results.csv
