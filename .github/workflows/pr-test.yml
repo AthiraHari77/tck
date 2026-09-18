@@ -74,6 +74,13 @@ jobs:
           fetch-depth: 0
 
       # ── 2. Sync upstream master (schedule + manual dispatch) ────────────────
+      # Compares the current upstream master SHA against the SHA stored in
+      # TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt — the SHA that
+      # was current when the baseline CSV was last generated.
+      # If they differ, master has moved since the last baseline run → re-run Drools.
+      # This correctly handles the case where the branch was already synced but
+      # the baseline Drools run was never executed (e.g. PRs merged before this
+      # workflow existed, or a run that synced but crashed before running Drools).
       - name: Sync upstream master
         id: sync
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -83,17 +90,26 @@ jobs:
           git remote add upstream https://github.com/dmn-tck/tck.git || true
           git fetch upstream master
 
-          BEFORE=$(git rev-parse HEAD)
-          git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)"
-          AFTER=$(git rev-parse HEAD)
+          # Merge latest upstream master into tck_dashboard
+          git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)" || true
+          git push origin tck_dashboard 2>/dev/null || true
 
-          if [ "$BEFORE" = "$AFTER" ]; then
+          # Current upstream master HEAD SHA
+          UPSTREAM_SHA=$(git rev-parse upstream/master)
+
+          # SHA that was current when we last ran the baseline Drools build
+          BASELINE_SHA_FILE="TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt"
+          STORED_SHA=$(cat "$BASELINE_SHA_FILE" 2>/dev/null || echo "")
+
+          echo "Upstream master SHA : $UPSTREAM_SHA"
+          echo "Last baseline SHA   : ${STORED_SHA:-<none>}"
+
+          if [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
             echo "master_changed=false" >> "$GITHUB_OUTPUT"
-            echo "No new upstream commits — skipping baseline refresh."
+            echo "Baseline is already up to date — skipping Drools re-run."
           else
             echo "master_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Upstream master moved ($BEFORE → $AFTER) — baseline refresh needed."
-            git push origin tck_dashboard
+            echo "Upstream master has moved since last baseline run — Drools re-run needed."
           fi
 
       # ── 3. Determine run mode ────────────────────────────────────────────────
@@ -245,10 +261,13 @@ jobs:
             echo "WARNING: No tck_results.csv produced — baseline not updated."
           else
             cp "$RESULT_CSV" TestResults/Drools/999-SNAPSHOT/tck_results.csv
+            # Record the upstream master SHA this baseline was built against
+            git rev-parse upstream/master > TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
             git add TestResults/Drools/999-SNAPSHOT/tck_results.csv
+            git add TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
             git diff --cached --quiet && echo "Baseline unchanged." || \
               git commit -m "baseline: refresh after upstream master sync $(date -u +%Y-%m-%d)"
-            git push origin tck_dashboard
+            git pull --rebase origin tck_dashboard && git push origin tck_dashboard
           fi
 
       # ── 9. Test each open PR in an isolated workspace ────────────────────────
