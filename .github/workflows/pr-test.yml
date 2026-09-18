@@ -268,7 +268,10 @@ jobs:
             git add TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
             git diff --cached --quiet && echo "Baseline unchanged." || \
               git commit -m "baseline: refresh after upstream master sync $(date -u +%Y-%m-%d)"
-            git pull --rebase origin tck_dashboard && git push origin tck_dashboard
+            git stash --include-untracked || true
+            git pull --rebase origin tck_dashboard
+            git stash pop || true
+            git push origin tck_dashboard
           fi
 
       # ── 9. Test each open PR in an isolated workspace ────────────────────────
