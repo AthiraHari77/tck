@@ -547,11 +547,13 @@ def build_dashboard(pr_results_dir, baseline_csv, upstream_repo, token, output_p
     total_fail    = baseline_summary["fail"]
     pass_rate     = f"{total_pass / total_tests * 100:.2f}%" if total_tests else "—"
 
+    open_pr_numbers   = {p["number"] for p in open_prs}
     total_open        = len(open_prs)
-    tested_count      = len(pr_results)
+    tested_count      = sum(1 for n in open_pr_numbers if n in pr_results)
     prs_with_new_fail = sum(
-        1 for r in pr_results.values()
-        if any(f["key"] not in baseline_keys for f in r["failures"])
+        1 for n, r in pr_results.items()
+        if n in open_pr_numbers
+        and any(f["key"] not in baseline_keys for f in r["failures"])
     )
 
     # PRs needing attention (open + tested + has new failures)
