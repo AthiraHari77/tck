@@ -1,49 +1,41 @@
 name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# WHAT THIS WORKFLOW DOES (in order, every weekly run)
+# WHAT THIS WORKFLOW DOES
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # STEP 1 — Sync upstream master
-#   Merges the latest dmn-tck/tck master into tck_dashboard so our test cases
-#   and runners are always up to date.
+#   Merges the latest dmn-tck/tck master into tck_dashboard.
 #
 # STEP 2 — Refresh baseline (only if master moved)
-#   Re-runs Drools 999-SNAPSHOT against the freshly synced master and commits
-#   the updated tck_results.csv as the new baseline. This ensures the dashboard
-#   correctly separates "already failing on master" from "introduced by this PR".
+#   Re-runs Drools 999-SNAPSHOT against master and commits only the baseline
+#   CSV (TestResults/Drools/999-SNAPSHOT/tck_results.csv). No HTML committed.
 #
-# STEP 3 — Test open upstream PRs
-#   For each open PR on dmn-tck/tck: clones upstream, locally merges master
-#   (ephemeral, never pushed), runs the TCK runner, saves results. Skips PRs
-#   whose head SHA hasn't changed since the last run.
+# STEP 3 — Test open upstream PRs (ephemeral — results NEVER committed)
+#   For each open PR: clone upstream, merge master locally, run TCK runner,
+#   store results in pr-results/ on the runner only.
 #
-# STEP 4 — Regenerate dashboard (always)
-#   Runs generate_dashboard.py to produce docs/drools-dashboard.html and
-#   commits + pushes everything back to tck_dashboard.
+# STEP 4 — Generate self-contained HTML dashboard (Node.js, no Python)
+#   Runs generate_dashboard.js → produces a single HTML file with all data,
+#   CSS and SVG embedded inline. No external fetch() needed.
 #
-# WHY NOT on:pull_request?
-#   GitHub's pull_request event only fires for PRs opened against THIS repo.
-#   The upstream dmn-tck/tck is a completely separate repository — there is no
-#   native GitHub event that fires here when someone opens a PR there.
-#   Weekly scheduled polling is the correct solution.
+# STEP 5 — Upload HTML to private Slack channel #tck-test
+#   Uses the Slack Web API files.getUploadURLExternal + files.completeUploadExternal
+#   to post the HTML file directly to channel C0C3HLC1NMT (#tck-test).
+#   Requires secret: SLACK_BOT_TOKEN (a Bot Token with files:write scope).
 #
-# MANUAL TRIGGER (workflow_dispatch)
-#   - specific PR number  → skip sync/baseline, test that PR only
-#   - "all"               → skip sync/baseline, test all currently open PRs
-#   - blank               → skip sync/baseline/testing, just refresh dashboard
+# CONFIDENTIALITY: pr-results/ and the HTML are NEVER committed to any git
+# branch. They live only in the runner for the duration of this workflow.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  # Weekly on Monday at 01:00 UTC
   schedule:
-    - cron: '0 1 * * 1'
+    - cron: '0 1 * * 1'   # Weekly — Monday 01:00 UTC
 
-  # Manual trigger with optional mode selection
   workflow_dispatch:
     inputs:
       upstream_pr:
-        description: 'PR number (e.g. 717), "all" for all open PRs, or blank to just refresh dashboard'
+        description: 'PR number, "all" for all open PRs, or blank to just refresh dashboard'
         required: false
         default: ''
       pr_title:
@@ -51,10 +43,6 @@ on:
         required: false
         default: ''
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CONCURRENCY — only one run active at a time; queue rather than cancel so
-# a queued run doesn't lose a 30-minute Drools build.
-# ─────────────────────────────────────────────────────────────────────────────
 concurrency:
   group: tck-dashboard
   cancel-in-progress: false
@@ -65,22 +53,15 @@ jobs:
     timeout-minutes: 240
 
     steps:
-      # ── 1. Checkout tck_dashboard branch ────────────────────────────────────
+      # ── 1. Checkout tck_dashboard branch ──────────────────────────────────
       - name: Checkout tck_dashboard
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.DASHBOARD_PAT }}
           ref: tck_dashboard
           fetch-depth: 0
 
-      # ── 2. Sync upstream master (schedule + manual dispatch) ────────────────
-      # Compares the current upstream master SHA against the SHA stored in
-      # TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt — the SHA that
-      # was current when the baseline CSV was last generated.
-      # If they differ, master has moved since the last baseline run → re-run Drools.
-      # This correctly handles the case where the branch was already synced but
-      # the baseline Drools run was never executed (e.g. PRs merged before this
-      # workflow existed, or a run that synced but crashed before running Drools).
+      # ── 2. Sync upstream master ────────────────────────────────────────────
       - name: Sync upstream master
         id: sync
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -90,14 +71,10 @@ jobs:
           git remote add upstream https://github.com/dmn-tck/tck.git || true
           git fetch upstream master
 
-          # Merge latest upstream master into tck_dashboard
           git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)" || true
           git push origin tck_dashboard 2>/dev/null || true
 
-          # Current upstream master HEAD SHA
           UPSTREAM_SHA=$(git rev-parse upstream/master)
-
-          # SHA that was current when we last ran the baseline Drools build
           BASELINE_SHA_FILE="TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt"
           STORED_SHA=$(cat "$BASELINE_SHA_FILE" 2>/dev/null || echo "")
 
@@ -106,13 +83,13 @@ jobs:
 
           if [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
             echo "master_changed=false" >> "$GITHUB_OUTPUT"
-            echo "Baseline is already up to date — skipping Drools re-run."
+            echo "Baseline is up to date — skipping Drools re-run."
           else
             echo "master_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Upstream master has moved since last baseline run — Drools re-run needed."
+            echo "Upstream master moved — Drools re-run needed."
           fi
 
-      # ── 3. Determine run mode ────────────────────────────────────────────────
+      # ── 3. Determine run mode ──────────────────────────────────────────────
       - name: Determine run mode
         id: mode
         env:
@@ -122,14 +99,12 @@ jobs:
           EVENT="${{ github.event_name }}"
 
           if [ "$EVENT" = "schedule" ]; then
-            # Weekly schedule: discover all open upstream PRs, skip unchanged ones.
             echo "trigger=schedule" >> "$GITHUB_OUTPUT"
-
             PR_LIST=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
-              | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);process.stdout.write(a.map(p=>p.number).join(' '));}catch(e){}})")
 
             NEW_PRS=""
             for PR in $PR_LIST; do
@@ -140,115 +115,95 @@ jobs:
                   -H "Authorization: Bearer $GH_TOKEN" \
                   -H "Accept: application/vnd.github+json" \
                   "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
-                  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
+                  | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write((o.head||{}).sha||'');}catch(e){}})" \
                   2>/dev/null || echo "")
-                STORED_SHA=$(python3 -c "import sys,json; d=json.load(open('pr-results/${PR}/meta.json')); print(d.get('head_sha',''))" \
-                  2>/dev/null || echo "")
+                STORED_SHA=$(node -e "try{const d=require('fs').readFileSync('pr-results/${PR}/meta.json','utf8');process.stdout.write(JSON.parse(d).head_sha||'');}catch(e){}" 2>/dev/null || echo "")
                 if [ -n "$LIVE_SHA" ] && [ "$LIVE_SHA" != "$STORED_SHA" ]; then
-                  echo "PR #$PR head SHA changed ($STORED_SHA → $LIVE_SHA) — re-testing"
+                  echo "PR #$PR SHA changed ($STORED_SHA → $LIVE_SHA) — queuing"
                   NEW_PRS="$NEW_PRS $PR"
+                else
+                  echo "PR #$PR unchanged — skipping"
                 fi
               fi
             done
             NEW_PRS=$(echo $NEW_PRS | xargs)
             echo "pr_list=$NEW_PRS" >> "$GITHUB_OUTPUT"
             echo "should_test=$([ -n "$NEW_PRS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-            echo "Schedule mode: PRs to test (new or updated) = '$NEW_PRS'"
+            echo "Schedule mode: PRs to test = '${NEW_PRS:-<none>}'"
 
           elif [ -n "$INPUT" ] && [ "$INPUT" != "all" ]; then
-            # Manual: single PR number
-            echo "trigger=single" >> "$GITHUB_OUTPUT"
-            echo "pr_list=$INPUT"  >> "$GITHUB_OUTPUT"
+            echo "trigger=single"   >> "$GITHUB_OUTPUT"
+            echo "pr_list=$INPUT"   >> "$GITHUB_OUTPUT"
             echo "should_test=true" >> "$GITHUB_OUTPUT"
             echo "Manual mode: single PR = $INPUT"
 
           elif [ "$INPUT" = "all" ]; then
-            # Manual: all open PRs
             PR_LIST=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
-              | python3 -c "import sys,json; prs=json.load(sys.stdin); print(' '.join(str(p['number']) for p in prs))")
-            echo "trigger=all" >> "$GITHUB_OUTPUT"
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);process.stdout.write(a.map(p=>p.number).join(' '));}catch(e){}})")
+            echo "trigger=all"      >> "$GITHUB_OUTPUT"
             echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
             echo "should_test=$([ -n "$PR_LIST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
             echo "Manual mode: all open PRs = '$PR_LIST'"
 
           else
-            # Manual: blank input → dashboard refresh only
-            echo "trigger=refresh" >> "$GITHUB_OUTPUT"
-            echo "pr_list=" >> "$GITHUB_OUTPUT"
+            echo "trigger=refresh"  >> "$GITHUB_OUTPUT"
+            echo "pr_list="         >> "$GITHUB_OUTPUT"
             echo "should_test=false" >> "$GITHUB_OUTPUT"
             echo "Manual mode: dashboard refresh only"
           fi
 
-      # ── 4. Set up Java 17 (needed for both baseline refresh and PR testing) ──
+      # ── 4. Set up Java 17 ──────────────────────────────────────────────────
       - name: Set up JDK 17
         if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
-        uses: actions/setup-java@v4.7.1
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── 5. Get Drools HEAD SHA for Maven cache key ───────────────────────────
+      # ── 5. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
       - name: Get Drools HEAD SHA
         if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
         id: drools-sha
         run: |
           SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD \
                 | cut -f1 | cut -c1-12)
-          echo "sha=$SHA"          >> "$GITHUB_OUTPUT"
-          echo "DROOLS_SHA=$SHA"   >> "$GITHUB_ENV"
+          echo "sha=$SHA"        >> "$GITHUB_OUTPUT"
+          echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
 
-      # ── 6. Cache Maven ~/.m2 ────────────────────────────────────────────────
+      # ── 6. Cache Maven ~/.m2 ──────────────────────────────────────────────
       - name: Cache Maven repository
         if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
-        uses: actions/cache@v4.2.3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-drools-${{ steps.drools-sha.outputs.sha }}
           restore-keys: m2-drools-
 
-      # ── 7. Build Drools 999-SNAPSHOT from source ────────────────────────────
-      #
-      # Build only the DMN module subtree — the full repo requires Kogito
-      # artifacts that aren't available in CI.
-      # ─────────────────────────────────────────────────────────────────────────
+      # ── 7. Build Drools 999-SNAPSHOT from source ───────────────────────────
       - name: Clone apache/incubator-kie-drools
         if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
         run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
 
-      - name: Build Drools DMN modules only (kie-dmn-api + kie-dmn-core)
+      - name: Build Drools DMN modules only
         if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
         working-directory: drools-src
         run: |
           mvn install \
-            --batch-mode \
-            -DskipTests \
-            -Dcheckstyle.skip=true \
-            -Denforcer.skip=true \
-            -Dformatter.skip=true \
-            -Dquarkus.build.skip=true \
+            --batch-mode -DskipTests \
+            -Dcheckstyle.skip=true -Denforcer.skip=true \
+            -Dformatter.skip=true  -Dquarkus.build.skip=true \
             -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
-            -am \
-            -T 2C \
-            -q
+            -am -T 2C -q
 
-      # ── 8. Refresh baseline against fresh master (only when master changed) ──
-      #
-      # Re-runs Drools TCK against the current master checkout so the baseline
-      # CSV always reflects what master actually fails — not a stale snapshot.
-      # This means PR failure counts are always compared against the real
-      # current master state, not the state from weeks/months ago.
-      # ─────────────────────────────────────────────────────────────────────────
+      # ── 8. Refresh baseline against fresh master ───────────────────────────
       - name: Run Drools TCK against master (refresh baseline)
         if: steps.sync.outputs.master_changed == 'true'
         run: |
-          mvn verify \
-            --batch-mode \
-            --update-snapshots \
-            -Pdrools \
-            -Dmaven.test.failure.ignore=true \
+          mvn verify --batch-mode --update-snapshots \
+            -Pdrools -Dmaven.test.failure.ignore=true \
             --file runners/pom.xml
 
       - name: Commit updated baseline CSV
@@ -256,34 +211,21 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The runner writes directly into TestResults/Drools/999-SNAPSHOT/tck_results.csv
-          # so no cp needed — just verify the file exists then commit it in place.
           RESULT_CSV="TestResults/Drools/999-SNAPSHOT/tck_results.csv"
           if [ ! -f "$RESULT_CSV" ]; then
             echo "WARNING: No tck_results.csv produced — baseline not updated."
           else
-            # Record the upstream master SHA this baseline was built against
             git rev-parse upstream/master > TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
-            git add TestResults/Drools/999-SNAPSHOT/tck_results.csv
-            git add TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
+            git add TestResults/Drools/999-SNAPSHOT/tck_results.csv \
+                    TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
             git diff --cached --quiet && echo "Baseline unchanged." || \
               git commit -m "baseline: refresh after upstream master sync $(date -u +%Y-%m-%d)"
-            git stash --include-untracked || true
             git pull --rebase origin tck_dashboard
-            git stash pop || true
             git push origin tck_dashboard
           fi
 
-      # ── 9. Test each open PR in an isolated workspace ────────────────────────
-      #
-      # For each PR we:
-      #   a) Clone upstream tck into a temp dir
-      #   b) Fetch the PR's head ref
-      #   c) Check out the PR branch and locally merge master (ephemeral — never pushed)
-      #      This gives the "post-sync" view without touching the author's branch.
-      #   d) Run the TCK runner inside the temp clone
-      #   e) Copy only the results CSV back — discard the temp clone
-      # ─────────────────────────────────────────────────────────────────────────
+      # ── 9. Test each PR in isolated workspace ──────────────────────────────
+      # Results go to pr-results/ on the runner only — NEVER committed to git.
       - name: Test each PR in isolated workspace
         if: steps.mode.outputs.should_test == 'true'
         env:
@@ -295,22 +237,17 @@ jobs:
             echo "  Testing upstream PR #$PR (isolated)"
             echo "════════════════════════════════════════════"
 
-            # ── a) Clone upstream tck ────────────────────────────────────────
             WORK_DIR="upstream-tck-pr-${PR}"
             rm -rf "$WORK_DIR"
             git clone --no-tags --single-branch --branch master \
               https://github.com/dmn-tck/tck.git "$WORK_DIR"
 
-            # ── b) Fetch the PR's head ref ───────────────────────────────────
             cd "$WORK_DIR"
             git fetch origin pull/${PR}/head:pr-${PR} || {
               echo "WARNING: Could not fetch PR #$PR — skipping"
-              cd ..
-              rm -rf "$WORK_DIR"
-              continue
+              cd ..; rm -rf "$WORK_DIR"; continue
             }
 
-            # ── c) Checkout PR branch and locally merge master ───────────────
             git checkout pr-${PR}
             git config user.email "ci@bamoe-dashboard.local"
             git config user.name  "BAMOE CI"
@@ -318,39 +255,33 @@ jobs:
             MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1)
             MERGE_EXIT=$?
             if echo "$MERGE_OUT" | grep -q "CONFLICT" || [ $MERGE_EXIT -ne 0 ]; then
-              echo "WARNING: PR #$PR — merge failed (exit=$MERGE_EXIT); testing unmerged branch"
-              echo "$MERGE_OUT"
+              echo "WARNING: PR #$PR — merge conflict, testing unmerged branch"
               git merge --abort 2>/dev/null || true
               MERGE_CONFLICT=true
-            else
-              echo "PR #$PR — local merge of master succeeded (ephemeral, never pushed)"
             fi
             cd ..
 
-            # ── d) Run TCK runner inside the temp clone ──────────────────────
             cd "$WORK_DIR/runners"
-            mvn verify \
-              --batch-mode \
-              --update-snapshots \
-              -Pdrools \
-              -Dmaven.test.failure.ignore=true
+            mvn verify --batch-mode --update-snapshots \
+              -Pdrools -Dmaven.test.failure.ignore=true
             cd ../..
 
-            # ── e) Copy results back, discard temp clone ─────────────────────
             RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             mkdir -p pr-results/${PR}
             RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
-
             if [ -z "$RESULT_CSV" ]; then
-              echo "WARNING: No tck_results.csv found for PR #$PR — skipping"
-              rm -rf "$WORK_DIR"
-              continue
+              echo "WARNING: No tck_results.csv for PR #$PR — skipping"
+              rm -rf "$WORK_DIR"; continue
             fi
-
             cp "$RESULT_CSV" pr-results/${PR}/tck_results.csv
             rm -rf "$WORK_DIR"
 
-            read -r TOTAL PASS FAIL < <(python3 scripts/count_csv.py "pr-results/${PR}/tck_results.csv")
+            read -r TOTAL PASS FAIL < <(node -e "
+              const fs=require('fs'),lines=fs.readFileSync('pr-results/${PR}/tck_results.csv','utf8').split('\n');
+              let t=0,p=0,f=0;
+              for(const l of lines){if(!l.trim())continue;const r=l.split(',');if(r.length<4)continue;t++;r[3].replace(/^\"|\"$/g,'')==='SUCCESS'?p++:f++;}
+              process.stdout.write(t+' '+p+' '+f);
+            ")
 
             PR_JSON=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
@@ -358,37 +289,29 @@ jobs:
               "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}")
 
             TITLE=$(echo "$PR_JSON" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('title',''))" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.title||'');}catch(e){}})" \
               2>/dev/null || echo "PR #${PR}")
-
             PR_HEAD_SHA=$(echo "$PR_JSON" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('head',{}).get('sha',''))" \
-              2>/dev/null || echo "")
-            PR_BASE_SHA=$(echo "$PR_JSON" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('base',{}).get('sha',''))" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write((o.head||{}).sha||'');}catch(e){}})" \
               2>/dev/null || echo "")
 
-            BEHIND_BY=0
-            SYNC_STATUS="unknown"
-            if [ -n "$PR_HEAD_SHA" ] && [ -n "$PR_BASE_SHA" ]; then
+            BEHIND_BY=0; SYNC_STATUS="unknown"
+            if [ -n "$PR_HEAD_SHA" ]; then
               COMPARE_JSON=$(curl -s \
                 -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/dmn-tck/tck/compare/master...${PR_HEAD_SHA}")
               BEHIND_BY=$(echo "$COMPARE_JSON" \
-                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('behind_by', 0))" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(String(o.behind_by||0));}catch(e){process.stdout.write('0');}})" \
                 2>/dev/null || echo "0")
               SYNC_STATUS=$(echo "$COMPARE_JSON" \
-                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.status||'unknown');}catch(e){process.stdout.write('unknown');}})" \
                 2>/dev/null || echo "unknown")
             fi
 
-            echo "PR #${PR} sync status: $SYNC_STATUS (behind_by=$BEHIND_BY)"
-
             TESTED_AS_SYNCED=true
-            if [ "$MERGE_CONFLICT" = "true" ]; then
-              TESTED_AS_SYNCED=false
-            fi
+            [ "$MERGE_CONFLICT" = "true" ] && TESTED_AS_SYNCED=false
+
             cat > pr-results/${PR}/meta.json << EOF
           {
             "pr_number": $PR,
@@ -406,63 +329,69 @@ jobs:
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
-
-            # ── f) Commit results for this PR immediately ────────────────────
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add pr-results/${PR}/
-            git diff --cached --quiet && true || \
-              git commit -m "dashboard: results for PR #${PR} @ $(date -u +%Y-%m-%d)"
-            PUSH_OK=false
-            for attempt in 1 2 3; do
-              if git push origin tck_dashboard; then
-                PUSH_OK=true
-                break
-              fi
-              echo "Push attempt $attempt failed — rebasing and retrying"
-              if ! git pull --rebase origin tck_dashboard; then
-                git rebase --abort 2>/dev/null || true
-                echo "## ❌ Push failed for PR #${PR}" >> "$GITHUB_STEP_SUMMARY"
-                echo "Rebase conflict on attempt ${attempt}. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
-                echo "Re-run this workflow manually to retry." >> "$GITHUB_STEP_SUMMARY"
-                exit 1
-              fi
-            done
-            if [ "$PUSH_OK" = "false" ]; then
-              echo "## ❌ Push failed for PR #${PR} after 3 attempts" >> "$GITHUB_STEP_SUMMARY"
-              echo "All 3 push attempts were rejected. Results for PR #${PR} and any subsequent PRs in this run were NOT persisted." >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
+            # ── Results stay on the runner only — no git add/push here ────────
           done
 
-      # ── 10. Set up Python ────────────────────────────────────────────────────
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Python deps
-        run: pip install requests
-
-      # ── 11. Regenerate dashboard (ALWAYS runs regardless of trigger) ─────────
-      - name: Generate dashboard
+      # ── 10. Generate self-contained HTML dashboard (Node.js) ──────────────
+      - name: Generate dashboard HTML
         env:
           GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
         run: |
-          python3 scripts/generate_dashboard.py \
+          node scripts/generate_dashboard.js \
             --pr-results-dir pr-results \
             --baseline-csv   TestResults/Drools/999-SNAPSHOT/tck_results.csv \
             --upstream-repo  dmn-tck/tck \
             --token          "$GITHUB_TOKEN" \
             --output         docs/drools-dashboard.html
 
-      # ── 12. Commit and push dashboard ────────────────────────────────────────
-      - name: Commit and push
+      # ── 11. Upload HTML to Slack #tck-test (channel C0C3HLC1NMT) ──────────
+      # Uses Slack Web API v2 file upload (files.getUploadURLExternal).
+      # Requires secret: SLACK_BOT_TOKEN — a Bot Token with files:write scope.
+      # The HTML is fully self-contained: open it locally, no server needed.
+      - name: Upload dashboard to Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          [ -d pr-results ] && git add pr-results/ || true
-          git add docs/drools-dashboard.html
-          git diff --cached --quiet && echo "No changes to commit" || \
-            git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
-          git push origin tck_dashboard
+          FILE="docs/drools-dashboard.html"
+          CHANNEL="C0C3HLC1NMT"
+          FILENAME="tck-dashboard-$(date -u +%Y-%m-%d).html"
+          FILESIZE=$(wc -c < "$FILE")
+          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          TRIGGER="${{ steps.mode.outputs.trigger }}"
+
+          echo "Requesting Slack upload URL…"
+          UPLOAD_RESP=$(curl -s -X POST "https://slack.com/api/files.getUploadURLExternal" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "filename=${FILENAME}" \
+            --data-urlencode "length=${FILESIZE}")
+
+          UPLOAD_URL=$(echo "$UPLOAD_RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.upload_url||'');}catch(e){}}")
+          FILE_ID=$(echo "$UPLOAD_RESP"    | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.file_id||'');}catch(e){}}")
+
+          if [ -z "$UPLOAD_URL" ] || [ -z "$FILE_ID" ]; then
+            echo "ERROR: Could not get Slack upload URL. Response: $UPLOAD_RESP"
+            exit 1
+          fi
+
+          echo "Uploading file (${FILESIZE} bytes)…"
+          curl -s -X POST "$UPLOAD_URL" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            --data-binary @"$FILE" > /dev/null
+
+          echo "Completing upload to channel ${CHANNEL}…"
+          COMPLETE_RESP=$(curl -s -X POST "https://slack.com/api/files.completeUploadExternal" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "{
+              \"files\": [{\"id\": \"${FILE_ID}\"}],
+              \"channel_id\": \"${CHANNEL}\",
+              \"initial_comment\": \"*Drools TCK Dashboard* — ${RUN_DATE} (trigger: ${TRIGGER})\nOpen the attached HTML file locally. All data is embedded — no server needed.\"
+            }")
+
+          OK=$(echo "$COMPLETE_RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(String(o.ok));}catch(e){process.stdout.write('false');}})")
+          if [ "$OK" != "true" ]; then
+            echo "ERROR: Slack upload failed. Response: $COMPLETE_RESP"
+            exit 1
+          fi
+          echo "✓ Dashboard uploaded to Slack #tck-test"
