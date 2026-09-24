@@ -9,23 +9,19 @@ name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
 #
 # STEP 2 — Refresh baseline (only if master moved)
 #   Re-runs Drools 999-SNAPSHOT against master and commits only the baseline
-#   CSV (TestResults/Drools/999-SNAPSHOT/tck_results.csv). No HTML committed.
+#   CSV (TestResults/Drools/999-SNAPSHOT/tck_results.csv).
 #
-# STEP 3 — Test open upstream PRs (ephemeral — results NEVER committed)
+# STEP 3 — Test open upstream PRs
 #   For each open PR: clone upstream, merge master locally, run TCK runner,
-#   store results in pr-results/ on the runner only.
+#   commit results to pr-results/ immediately after each PR.
 #
 # STEP 4 — Generate self-contained HTML dashboard (Node.js, no Python)
 #   Runs generate_dashboard.js → produces a single HTML file with all data,
 #   CSS and SVG embedded inline. No external fetch() needed.
 #
-# STEP 5 — Upload HTML to private Slack channel #tck-test
-#   Uses the Slack Web API files.getUploadURLExternal + files.completeUploadExternal
-#   to post the HTML file directly to channel C0C3HLC1NMT (#tck-test).
-#   Requires secret: SLACK_BOT_TOKEN (a Bot Token with files:write scope).
-#
-# CONFIDENTIALITY: pr-results/ and the HTML are NEVER committed to any git
-# branch. They live only in the runner for the duration of this workflow.
+# STEP 5 — Commit and push dashboard HTML to tck_dashboard branch
+#   The HTML is committed to docs/drools-dashboard.html and served via
+#   GitHub Pages (or browsed directly from the branch).
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -329,7 +325,30 @@ jobs:
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
-            # ── Results stay on the runner only — no git add/push here ────────
+
+            # ── Commit results for this PR immediately ────────────────────────
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pr-results/${PR}/
+            git diff --cached --quiet && true || \
+              git commit -m "dashboard: results for PR #${PR} @ $(date -u +%Y-%m-%d)"
+            PUSH_OK=false
+            for attempt in 1 2 3; do
+              if git push origin tck_dashboard; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push attempt $attempt failed — rebasing and retrying"
+              if ! git pull --rebase origin tck_dashboard; then
+                git rebase --abort 2>/dev/null || true
+                echo "## ❌ Push failed for PR #${PR}" >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+            done
+            if [ "$PUSH_OK" = "false" ]; then
+              echo "## ❌ Push failed for PR #${PR} after 3 attempts" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
           done
 
       # ── 10. Generate self-contained HTML dashboard (Node.js) ──────────────
@@ -344,54 +363,12 @@ jobs:
             --token          "$GITHUB_TOKEN" \
             --output         docs/drools-dashboard.html
 
-      # ── 11. Upload HTML to Slack #tck-test (channel C0C3HLC1NMT) ──────────
-      # Uses Slack Web API v2 file upload (files.getUploadURLExternal).
-      # Requires secret: SLACK_BOT_TOKEN — a Bot Token with files:write scope.
-      # The HTML is fully self-contained: open it locally, no server needed.
-      - name: Upload dashboard to Slack
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      # ── 11. Commit and push dashboard HTML ────────────────────────────────
+      - name: Commit and push dashboard
         run: |
-          FILE="docs/drools-dashboard.html"
-          CHANNEL="C0C3HLC1NMT"
-          FILENAME="tck-dashboard-$(date -u +%Y-%m-%d).html"
-          FILESIZE=$(wc -c < "$FILE")
-          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
-          TRIGGER="${{ steps.mode.outputs.trigger }}"
-
-          echo "Requesting Slack upload URL…"
-          UPLOAD_RESP=$(curl -s -X POST "https://slack.com/api/files.getUploadURLExternal" \
-            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "filename=${FILENAME}" \
-            --data-urlencode "length=${FILESIZE}")
-
-          UPLOAD_URL=$(echo "$UPLOAD_RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.upload_url||'');}catch(e){}}")
-          FILE_ID=$(echo "$UPLOAD_RESP"    | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.file_id||'');}catch(e){}}")
-
-          if [ -z "$UPLOAD_URL" ] || [ -z "$FILE_ID" ]; then
-            echo "ERROR: Could not get Slack upload URL. Response: $UPLOAD_RESP"
-            exit 1
-          fi
-
-          echo "Uploading file (${FILESIZE} bytes)…"
-          curl -s -X POST "$UPLOAD_URL" \
-            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-            --data-binary @"$FILE" > /dev/null
-
-          echo "Completing upload to channel ${CHANNEL}…"
-          COMPLETE_RESP=$(curl -s -X POST "https://slack.com/api/files.completeUploadExternal" \
-            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-            -H "Content-Type: application/json; charset=utf-8" \
-            -d "{
-              \"files\": [{\"id\": \"${FILE_ID}\"}],
-              \"channel_id\": \"${CHANNEL}\",
-              \"initial_comment\": \"*Drools TCK Dashboard* — ${RUN_DATE} (trigger: ${TRIGGER})\nOpen the attached HTML file locally. All data is embedded — no server needed.\"
-            }")
-
-          OK=$(echo "$COMPLETE_RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(String(o.ok));}catch(e){process.stdout.write('false');}})")
-          if [ "$OK" != "true" ]; then
-            echo "ERROR: Slack upload failed. Response: $COMPLETE_RESP"
-            exit 1
-          fi
-          echo "✓ Dashboard uploaded to Slack #tck-test"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/drools-dashboard.html
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
+          git push origin tck_dashboard
