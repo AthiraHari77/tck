@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drools TCK Dashboard — 999-SNAPSHOT</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #fff; color: #1f2328; padding: 24px 20px 56px; }
+.page { max-width: 860px; margin: 0 auto; }
+.header { border-bottom: 1px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 22px; }
+.header h1 { font-size: 19px; font-weight: 700; }
+.header-meta { font-size: 12px; color: #57606a; margin-top: 5px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.header-meta a { color: #3b82d4; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-fail    { background: #fee2e2; color: #991b1b; }
+.badge-warn    { background: #fef3c7; color: #92400e; }
+.badge-info    { background: #dbeafe; color: #1e40af; }
+.badge-purple  { background: #ede9fe; color: #5b21b6; }
+.badge-gray    { background: #f3f4f6; color: #374151; }
+.badge-new     { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.badge-exist   { background: #fef3c7; color: #92400e; }
+.badge-notested{ background: #f3f4f6; color: #57606a; border: 1px solid #e5e7eb; }
+.badge-stale   { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.badge-conflict{ background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+section { margin-bottom: 30px; }
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
+.kpi { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 13px 12px; text-align: center; }
+.kpi-value { font-size: 24px; font-weight: 700; line-height: 1.15; }
+.kpi-label { font-size: 11px; color: #57606a; margin-top: 3px; }
+.green { color: #065f46; } .red { color: #991b1b; } .orange { color: #92400e; } .blue { color: #1e40af; }
+.charts-row { display: grid; grid-template-columns: 210px 1fr; gap: 12px; margin-bottom: 14px; align-items: start; }
+.chart-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 16px; }
+.chart-title { font-size: 12px; font-weight: 600; color: #57606a; margin-bottom: 10px; }
+.bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bar-label { font-size: 12px; color: #57606a; white-space: nowrap; min-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { flex: 1; height: 12px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 3px; }
+.bar-val   { font-size: 11px; color: #57606a; min-width: 56px; text-align: right; white-space: nowrap; }
+.vc-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; margin-bottom: 8px; }
+.vc-head { font-size: 12px; font-weight: 700; color: #57606a; margin-bottom: 8px; }
+.vc-stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f0f1f3; gap: 8px; }
+.vc-stat:last-child { border-bottom: none; }
+.vc-stat span:first-child { color: #57606a; } .vc-stat a { color: #3b82d4; text-decoration: none; }
+.warn-box { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #f97316; border-radius: 6px; padding: 11px 14px; font-size: 13px; color: #9a3412; margin-bottom: 14px; }
+.warn-box ul { margin-top: 6px; padding-left: 18px; }
+.table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #f0f1f3; }
+tbody tr:last-child { border-bottom: none; }
+tbody td { padding: 8px 10px; vertical-align: top; }
+tbody tr:hover { background: #fafbfc; }
+tbody tr.row-new td { background: #fff5f5; }
+.mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+.pr-status-table thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+.pr-status-table tbody tr { border-bottom: 1px solid #f0f1f3; }
+.pr-status-table tbody td { padding: 9px 10px; vertical-align: middle; }
+.pr-row-fail td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+.pr-row-warn td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+.pr-row-pass td:first-child { box-shadow: inset 3px 0 0 #059669; }
+.pr-row-pending td:first-child { box-shadow: inset 3px 0 0 #d1d5db; }
+.pr-num { font-size: 12px; font-weight: 700; color: #57606a; white-space: nowrap; }
+.pr-title-link { font-weight: 500; color: #3b82d4; text-decoration: none; }
+.pr-title-link:hover { text-decoration: underline; }
+.pr-author-date { font-size: 11px; color: #9ca3af; }
+.fail-pr-block { margin-bottom: 20px; }
+.fail-pr-header { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 8px; }
+.fail-pr-header a { font-weight: 600; font-size: 13px; color: #3b82d4; text-decoration: none; }
+.footnote { font-size: 11px; color: #57606a; margin-top: 7px; }
+@media (max-width: 640px) { .kpi-row { grid-template-columns: repeat(2,1fr); } .charts-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>Drools TCK Compatibility Dashboard</h1>
+  <div class="header-meta">
+    <span>Source: <a href="https://github.com/dmn-tck/tck" target="_blank" rel="noopener">github.com/dmn-tck/tck</a> · master</span>
+    <span>Engine: <strong>Apache KIE Drools</strong> 999-SNAPSHOT</span>
+    <span>Generated: <strong>2026-09-24 04:51 UTC</strong></span>
+  </div>
+</div>
+
+
+
+<section>
+  <div class="section-title">Overview — Apache KIE Drools 999-SNAPSHOT</div>
+  
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-value green">0</div><div class="kpi-label">Tests Passing</div></div>
+  <div class="kpi"><div class="kpi-value red">0</div><div class="kpi-label">Tests Failing</div></div>
+  <div class="kpi"><div class="kpi-value blue">0</div><div class="kpi-label">Suites Affected</div></div>
+  <div class="kpi"><div class="kpi-value orange">—</div><div class="kpi-label">Pass Rate</div></div>
+</div>
+  <div class="charts-row">
+    <div class="chart-box"><div class="chart-title">Pass / Fail split</div><svg viewBox="0 0 180 155" width="100%" style="display:block">
+  <circle cx="90" cy="70" r="46" fill="none" stroke="#e5e7eb" stroke-width="20"/>
+  <circle cx="90" cy="70" r="46" fill="none" stroke="#059669" stroke-width="20"
+    stroke-dasharray="289.0 0.0"
+    stroke-dashoffset="72.3" transform="rotate(-90 90 70)"/>
+  
+  <text x="90" y="65" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">—</text>
+  <text x="90" y="81" text-anchor="middle" font-size="10" fill="#57606a">pass rate</text>
+  <rect x="18" y="128" width="10" height="10" rx="2" fill="#059669"/>
+  <text x="32" y="138" font-size="11" fill="#374151">Pass — 0</text>
+  <rect x="110" y="128" width="10" height="10" rx="2" fill="#ef4444"/>
+  <text x="124" y="138" font-size="11" fill="#374151">Fail — 0</text>
+</svg></div>
+    <div class="chart-box"><div class="chart-title">Results by compliance level</div></div>
+  </div>
+  <div class="vc-box">
+  <div class="vc-head">Apache KIE Drools 999-SNAPSHOT</div>
+  <div class="vc-stat"><span>Total tests</span><strong>0</strong></div>
+  <div class="vc-stat"><span>Passing</span><strong class="green">0</strong></div>
+  <div class="vc-stat"><span>Failing</span><strong class="red">0</strong></div>
+  <div class="vc-stat"><span>Pass rate</span><strong>—</strong></div>
+  <div class="vc-stat"><span>Suites with failures</span><strong>0</strong></div>
+  <div class="vc-stat"><span>Upstream repo</span>
+    <a href="https://github.com/dmn-tck/tck" target="_blank" rel="noopener">dmn-tck/tck</a></div>
+</div>
+</section>
+
+<section>
+  <div class="section-title">
+    Open Pull Requests
+    <span class="badge badge-info">10 open</span>
+    <span class="badge badge-gray">0 tested</span>
+    
+  </div>
+  <div class="table-wrap"><table class="pr-status-table">
+  <thead><tr><th style="width:52px">PR</th><th>Title</th><th>Drools result</th><th style="width:130px">Pass rate</th></tr></thead>
+  <tbody><tr class="pr-row-pending">
+  <td><span class="pr-num">#738</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/738" target="_blank" rel="noopener">Add test cases for unary tests in decision tables</a>
+    <br><span class="badge badge-purple">1163-unarytests-decisiontable</span>
+    <br><span class="pr-author-date">opatrascoiu &middot; 2026-09-17</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#753</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/753" target="_blank" rel="noopener">Add test cases for imported child inputs and decisions.</a>
+    <br><span class="badge badge-purple">0085-decision-services</span>
+    <br><span class="pr-author-date">opatrascoiu &middot; 2026-09-09</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#746</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/746" target="_blank" rel="noopener">Update decisionservice result evaluation logic to account for implicit conversion</a>
+    
+    <br><span class="pr-author-date">AthiraHari77 &middot; 2026-07-13</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#737</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/737" target="_blank" rel="noopener">Add test cases for imports with two inputs with same name</a>
+    <br><span class="badge badge-purple">1162-import-same-name</span>
+    <br><span class="pr-author-date">opatrascoiu &middot; 2026-05-21</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#739</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/739" target="_blank" rel="noopener">Add tests for imports with no prefix</a>
+    <br><span class="badge badge-purple">1158-noname-imports</span>
+    <br><span class="pr-author-date">opatrascoiu &middot; 2026-05-21</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#740</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/740" target="_blank" rel="noopener">Add tests for imports with prefix</a>
+    <br><span class="badge badge-purple">1159-prefix-imports</span>
+    <br><span class="pr-author-date">opatrascoiu &middot; 2026-05-21</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#714</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/714" target="_blank" rel="noopener">Updating the test cases for comparison of DMN FEEL range in unary format</a>
+    <br><span class="badge badge-purple">0068-feel-equality</span>
+    <br><span class="pr-author-date">AthiraHari77 &middot; 2026-02-05</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#696</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/696" target="_blank" rel="noopener">[DMN 1.6] Single parameter number function-TCK test cases</a>
+    <br><span class="badge badge-purple">0058-feel-number-function</span>
+    <br><span class="pr-author-date">ChinchuAjith &middot; 2026-02-04</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#654</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/654" target="_blank" rel="noopener">[DMN 1.6] Date / Time value accessor</a>
+    <br><span class="badge badge-purple">1159-data-time-value</span>
+    <br><span class="pr-author-date">SimonRinguette &middot; 2026-02-04</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr><tr class="pr-row-pending">
+  <td><span class="pr-num">#644</span></td>
+  <td><a class="pr-title-link" href="https://github.com/dmn-tck/tck/pull/644" target="_blank" rel="noopener">[DMN 1.6] FEEL Descendant Operator</a>
+    <br><span class="badge badge-purple">1158-feel-descendant-operator</span>
+    <br><span class="pr-author-date">SimonRinguette &middot; 2025-12-19</span></td>
+  <td><span class="badge badge-notested">not tested</span></td>
+  <td><span style="color:#9ca3af;font-size:12px;">—</span></td>
+</tr></tbody>
+</table></div>
+<p class="footnote">Results tested as if each PR branch were synced with master (local merge before run).</p>
+</section>
+
+
+
+<section>
+  <div class="section-title">Baseline Failures — Already on Master
+    <span class="badge badge-warn">0 failures</span>
+  </div>
+  <p class="footnote" style="margin-bottom:10px;">These failures exist on the current master branch before any PR is applied. Pre-existing issues in Drools 999-SNAPSHOT, not counted against any open PR.</p>
+  <p style="color:#057a55;font-size:13px;padding:8px 0;">&#x2705; No baseline failures on master.</p>
+</section>
+
+</div>
+<footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:32px;padding-top:12px;max-width:860px;margin-left:auto;margin-right:auto;">
+  Auto-generated · <a href="https://github.com/dmn-tck/tck" target="_blank" rel="noopener" style="color:#9ca3af;">github.com/dmn-tck/tck</a>
+</footer>
+</body>
+</html>
