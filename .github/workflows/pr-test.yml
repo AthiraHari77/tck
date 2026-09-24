@@ -371,4 +371,5 @@ jobs:
           git add docs/drools-dashboard.html
           git diff --cached --quiet && echo "No changes to commit" || \
             git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
+          git pull --rebase origin tck_dashboard
           git push origin tck_dashboard
