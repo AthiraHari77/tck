@@ -1,0 +1,392 @@
+name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT THIS WORKFLOW DOES
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# STEP 1 — Sync upstream master
+#   Merges the latest dmn-tck/tck master into tck_dashboard.
+#
+# STEP 2 — Restore baseline CSV from cache
+#   Restores TestResults/Drools/999-SNAPSHOT/tck_results.csv from the Actions
+#   cache. On a cache miss (first run or expired) the file is simply absent and
+#   Step 9 will produce it fresh.
+#
+# STEP 3 — Determine run mode
+#   Decides which PRs to test based on the trigger input.
+#
+# STEP 4–8 — Java, Drools SHA, Maven cache, build Drools (only if needed)
+#   Clones apache/incubator-kie-drools and builds only the two DMN modules.
+#   Skipped entirely if the baseline cache hit AND no PRs to test.
+#
+# STEP 9 — Refresh baseline (only on cache miss)
+#   Re-runs Drools TCK against master, saves tck_results.csv to cache.
+#   Never committed to git.
+#
+# STEP 10 — Test ALL open upstream PRs (always fresh, never committed)
+#   For each PR: clone upstream, merge master locally, run TCK runner.
+#   Results stay on the runner only.
+#
+# STEP 11 — Generate self-contained HTML dashboard (Node.js)
+#   Runs generate_dashboard.js → produces docs/drools-dashboard.html.
+#
+# STEP 12 — Commit and push dashboard HTML (GitHub Pages)
+#   Only docs/drools-dashboard.html is committed. Uses _push_with_retry
+#   (3 attempts with rebase) matching the Tekton pipeline pattern.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'   # Weekly — Monday 01:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      upstream_pr:
+        description: 'PR number, "all" for all open PRs, or blank for all open PRs'
+        required: false
+        default: ''
+      pr_title:
+        description: 'Short title label (only used for a single PR number)'
+        required: false
+        default: ''
+
+concurrency:
+  group: tck-dashboard
+  cancel-in-progress: false
+
+jobs:
+  test-and-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      # ── 1. Checkout tck_dashboard branch ──────────────────────────────────
+      - name: Checkout tck_dashboard
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DASHBOARD_PAT }}
+          ref: tck_dashboard
+          fetch-depth: 0
+
+      # ── 2. Sync upstream master ────────────────────────────────────────────
+      - name: Sync upstream master
+        id: sync
+        run: |
+          set -eo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/dmn-tck/tck.git || true
+          git fetch upstream master
+          git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)" || true
+          git push origin tck_dashboard 2>/dev/null || true
+
+          UPSTREAM_SHA=$(git rev-parse upstream/master)
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          echo "Upstream master SHA: $UPSTREAM_SHA"
+
+      # ── 3. Determine run mode ──────────────────────────────────────────────
+      - name: Determine run mode
+        id: mode
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          set -eo pipefail
+          INPUT="${{ github.event.inputs.upstream_pr }}"
+          EVENT="${{ github.event_name }}"
+
+          _fetch_open_pr_list() {
+            curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);process.stdout.write(a.map(p=>p.number).join(' '));}catch(e){}})"
+          }
+
+          if [ -n "$INPUT" ] && [ "$INPUT" != "all" ]; then
+            # Manual: single PR number
+            echo "pr_list=$INPUT"   >> "$GITHUB_OUTPUT"
+            echo "should_test=true" >> "$GITHUB_OUTPUT"
+            echo "trigger=single"   >> "$GITHUB_OUTPUT"
+            echo "Mode: single PR = $INPUT"
+          else
+            # Schedule, "all", or blank — always test all open PRs
+            PR_LIST=$(_fetch_open_pr_list)
+            echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
+            echo "should_test=$([ -n "$PR_LIST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT" = "schedule" ]; then
+              echo "trigger=schedule" >> "$GITHUB_OUTPUT"
+            elif [ "$INPUT" = "all" ]; then
+              echo "trigger=all" >> "$GITHUB_OUTPUT"
+            else
+              echo "trigger=refresh" >> "$GITHUB_OUTPUT"
+            fi
+            echo "Mode: all open PRs = '$PR_LIST'"
+          fi
+
+      # ── 4. Restore baseline CSV from cache ────────────────────────────────
+      - name: Restore baseline CSV from cache
+        id: cache-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
+          restore-keys: baseline-drools-
+
+      # ── 5. Set up Java 17 ─────────────────────────────────────────────────
+      - name: Set up JDK 17
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── 6. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
+      - name: Get Drools HEAD SHA
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        id: drools-sha
+        run: |
+          set -eo pipefail
+          SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD \
+                | cut -f1 | cut -c1-12)
+          echo "sha=$SHA"        >> "$GITHUB_OUTPUT"
+          echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "Drools HEAD SHA: $SHA"
+
+      # ── 7. Cache Maven ~/.m2 ──────────────────────────────────────────────
+      - name: Cache Maven repository
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-drools-${{ steps.drools-sha.outputs.sha }}
+          restore-keys: m2-drools-
+
+      # ── 8. Build Drools 999-SNAPSHOT from source ───────────────────────────
+      - name: Clone apache/incubator-kie-drools
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        run: |
+          set -eo pipefail
+          git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
+          echo "=== Building apache/incubator-kie-drools (DMN modules only) ==="
+
+      - name: Build Drools DMN modules only
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        working-directory: drools-src
+        run: |
+          set -eo pipefail
+          mvn install \
+            --batch-mode \
+            -DskipTests \
+            -Dcheckstyle.skip=true \
+            -Denforcer.skip=true \
+            -Dformatter.skip=true \
+            -Dquarkus.build.skip=true \
+            -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
+            -am \
+            -T 2C \
+            -q
+          echo "Drools build complete"
+
+      # ── 9. Refresh baseline (only on cache miss) ───────────────────────────
+      - name: Run Drools TCK against master (refresh baseline)
+        if: steps.cache-baseline.outputs.cache-hit != 'true'
+        run: |
+          set -eo pipefail
+          mvn verify --batch-mode --update-snapshots \
+            -Pdrools -Dmaven.test.failure.ignore=true \
+            --file runners/pom.xml
+
+      - name: Save baseline CSV to cache
+        if: steps.cache-baseline.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
+
+      # ── 10. Test each open PR (always fresh, never committed) ──────────────
+      - name: Test each PR in isolated workspace
+        if: steps.mode.outputs.should_test == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+          PR_LIST: ${{ steps.mode.outputs.pr_list }}
+        run: |
+          set -eo pipefail
+          WORKSPACE="$GITHUB_WORKSPACE"
+
+          _test_pr() {
+            local PR="$1"
+            local WORK_DIR="${WORKSPACE}/upstream-tck-pr-${PR}"
+            rm -rf "$WORK_DIR"
+
+            # ── a) Clone upstream tck master ──────────────────────────────────
+            git clone --no-tags --single-branch --branch master \
+              https://github.com/dmn-tck/tck.git "$WORK_DIR"
+
+            cd "$WORK_DIR"
+            git config user.email "ci@bamoe-dashboard.local"
+            git config user.name  "BAMOE CI"
+
+            # ── b) Fetch the PR's branch from public upstream ─────────────────
+            git fetch origin "pull/${PR}/head:pr-${PR}" || {
+              echo "WARNING: Could not fetch PR #${PR} — skipping"
+              cd "$WORKSPACE"
+              rm -rf "$WORK_DIR"
+              return 0
+            }
+
+            # ── c) Checkout PR branch and locally merge master ────────────────
+            git checkout "pr-${PR}"
+            local MERGE_CONFLICT=false
+            local MERGE_OUT MERGE_EXIT
+            MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1)
+            MERGE_EXIT=$?
+            if echo "$MERGE_OUT" | grep -q "CONFLICT" || [ "$MERGE_EXIT" -ne 0 ]; then
+              echo "WARNING: PR #${PR} — merge conflict, testing unmerged branch"
+              git merge --abort 2>/dev/null || true
+              MERGE_CONFLICT=true
+            else
+              echo "PR #${PR} — local merge of master succeeded"
+            fi
+            cd "$WORKSPACE"
+
+            # ── d) Run TCK runner inside the temp clone ───────────────────────
+            cd "$WORK_DIR/runners"
+            mvn verify \
+              --batch-mode \
+              --update-snapshots \
+              -Pdrools \
+              -Dmaven.test.failure.ignore=true
+            cd "$WORKSPACE"
+
+            # ── e) Copy results back, discard temp clone ──────────────────────
+            local RUN_DATE
+            RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            mkdir -p "${WORKSPACE}/pr-results/${PR}"
+
+            local RESULT_CSV
+            RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
+            if [ -z "$RESULT_CSV" ]; then
+              echo "WARNING: No tck_results.csv for PR #${PR} — skipping"
+              rm -rf "$WORK_DIR"
+              return 0
+            fi
+            cp "$RESULT_CSV" "${WORKSPACE}/pr-results/${PR}/tck_results.csv"
+            rm -rf "$WORK_DIR"
+
+            local COUNTS
+            COUNTS=$(node -e "
+              const fs=require('fs'),lines=fs.readFileSync('${WORKSPACE}/pr-results/${PR}/tck_results.csv','utf8').split('\n');
+              let t=0,p=0,f=0;
+              for(const l of lines){if(!l.trim())continue;const r=l.split(',');if(r.length<4)continue;t++;r[3].replace(/^\"|\"$/g,'')==='SUCCESS'?p++:f++;}
+              process.stdout.write(t+' '+p+' '+f);
+            ")
+            local TOTAL PASS FAIL
+            TOTAL=$(echo "$COUNTS" | cut -d' ' -f1)
+            PASS=$(echo  "$COUNTS" | cut -d' ' -f2)
+            FAIL=$(echo  "$COUNTS" | cut -d' ' -f3)
+
+            local PR_JSON TITLE PR_HEAD_SHA
+            PR_JSON=$(curl -s \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}")
+
+            TITLE=$(echo "$PR_JSON" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.title||'');}catch(e){}})" \
+              2>/dev/null || echo "PR #${PR}")
+            PR_HEAD_SHA=$(echo "$PR_JSON" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write((o.head||{}).sha||'');}catch(e){}})" \
+              2>/dev/null || echo "")
+
+            local BEHIND_BY=0 SYNC_STATUS="unknown"
+            if [ -n "$PR_HEAD_SHA" ]; then
+              local COMPARE_JSON
+              COMPARE_JSON=$(curl -s \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/dmn-tck/tck/compare/master...${PR_HEAD_SHA}")
+              BEHIND_BY=$(echo "$COMPARE_JSON" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(String(o.behind_by||0));}catch(e){process.stdout.write('0');}})" \
+                2>/dev/null || echo "0")
+              SYNC_STATUS=$(echo "$COMPARE_JSON" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write(o.status||'unknown');}catch(e){process.stdout.write('unknown');}})" \
+                2>/dev/null || echo "unknown")
+            fi
+
+            local TESTED_AS_SYNCED=true
+            [ "$MERGE_CONFLICT" = "true" ] && TESTED_AS_SYNCED=false
+
+            cat > "${WORKSPACE}/pr-results/${PR}/meta.json" << EOF
+          {
+            "pr_number": ${PR},
+            "pr_title": "${TITLE}",
+            "run_date": "${RUN_DATE}",
+            "drools_sha": "${DROOLS_SHA}",
+            "head_sha": "${PR_HEAD_SHA}",
+            "total": ${TOTAL},
+            "pass": ${PASS},
+            "fail": ${FAIL},
+            "behind_by": ${BEHIND_BY},
+            "sync_status": "${SYNC_STATUS}",
+            "tested_as_synced": ${TESTED_AS_SYNCED},
+            "merge_conflict": ${MERGE_CONFLICT}
+          }
+          EOF
+            echo "PR #${PR} — ${PASS} passed / ${FAIL} failed / ${TOTAL} total"
+            # Results stay on the runner only — never committed to git
+          }
+
+          for PR in $PR_LIST; do
+            echo "════════════════════════════════════════════"
+            echo "  Testing upstream PR #$PR (isolated)"
+            echo "════════════════════════════════════════════"
+            _test_pr "$PR"
+          done
+
+      # ── 11. Generate self-contained HTML dashboard ─────────────────────────
+      - name: Generate dashboard HTML
+        env:
+          GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          set -eo pipefail
+          echo "=== Checking Node.js ==="
+          node --version || { echo "ERROR: node not available"; exit 1; }
+          node scripts/generate_dashboard.js \
+            --pr-results-dir pr-results \
+            --baseline-csv   TestResults/Drools/999-SNAPSHOT/tck_results.csv \
+            --upstream-repo  dmn-tck/tck \
+            --token          "$GITHUB_TOKEN" \
+            --output         docs/drools-dashboard.html
+
+      # ── 12. Commit and push dashboard HTML (GitHub Pages) ──────────────────
+      - name: Commit and push dashboard HTML
+        run: |
+          set -eo pipefail
+
+          _push_with_retry() {
+            local BRANCH="$1"
+            local PUSH_OK=false
+            for attempt in 1 2 3; do
+              if git push origin "$BRANCH"; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push attempt ${attempt} failed — rebasing and retrying"
+              if ! git pull --rebase origin "$BRANCH"; then
+                git rebase --abort 2>/dev/null || true
+                echo "ERROR: Rebase conflict on attempt ${attempt}. Results NOT persisted."
+                exit 1
+              fi
+            done
+            if [ "$PUSH_OK" = "false" ]; then
+              echo "ERROR: Push failed after 3 attempts."
+              exit 1
+            fi
+          }
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/drools-dashboard.html
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "dashboard: ${{ steps.mode.outputs.trigger }} @ $(date -u +%Y-%m-%d)"
+          _push_with_retry tck_dashboard
