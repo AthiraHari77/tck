@@ -273,13 +273,17 @@ jobs:
             cp "$RESULT_CSV" "${WORKSPACE}/pr-results/${PR}/tck_results.csv"
             rm -rf "$WORK_DIR"
 
-            local TOTAL PASS FAIL
-            read -r TOTAL PASS FAIL < <(node -e "
+            local COUNTS
+            COUNTS=$(node -e "
               const fs=require('fs'),lines=fs.readFileSync('${WORKSPACE}/pr-results/${PR}/tck_results.csv','utf8').split('\n');
               let t=0,p=0,f=0;
               for(const l of lines){if(!l.trim())continue;const r=l.split(',');if(r.length<4)continue;t++;r[3].replace(/^\"|\"$/g,'')==='SUCCESS'?p++:f++;}
               process.stdout.write(t+' '+p+' '+f);
             ")
+            local TOTAL PASS FAIL
+            TOTAL=$(echo "$COUNTS" | cut -d' ' -f1)
+            PASS=$(echo  "$COUNTS" | cut -d' ' -f2)
+            FAIL=$(echo  "$COUNTS" | cut -d' ' -f3)
 
             local PR_JSON TITLE PR_HEAD_SHA
             PR_JSON=$(curl -s \
