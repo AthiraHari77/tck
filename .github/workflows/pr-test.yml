@@ -7,21 +7,32 @@ name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
 # STEP 1 — Sync upstream master
 #   Merges the latest dmn-tck/tck master into tck_dashboard.
 #
-# STEP 2 — Refresh baseline (only if master moved)
-#   Re-runs Drools 999-SNAPSHOT against master and commits only the baseline
-#   CSV (TestResults/Drools/999-SNAPSHOT/tck_results.csv).
+# STEP 2 — Restore baseline CSV from cache
+#   Restores TestResults/Drools/999-SNAPSHOT/tck_results.csv from the Actions
+#   cache. On a cache miss (first run or expired) the file is simply absent and
+#   the baseline re-run in Step 6 will produce it fresh.
 #
-# STEP 3 — Test open upstream PRs
-#   For each open PR: clone upstream, merge master locally, run TCK runner,
-#   commit results to pr-results/ immediately after each PR.
+# STEP 3 — Determine whether baseline needs a refresh
+#   Compares the upstream master SHA against the SHA embedded in the cached CSV
+#   path key. If master has moved (or cache missed), Drools is re-run.
 #
-# STEP 4 — Generate self-contained HTML dashboard (Node.js, no Python)
-#   Runs generate_dashboard.js → produces a single HTML file with all data,
-#   CSS and SVG embedded inline. No external fetch() needed.
+# STEP 4 — Build Drools 999-SNAPSHOT from source (only if needed)
+#   Clones apache/incubator-kie-drools and builds only the two DMN modules.
 #
-# STEP 5 — Commit and push dashboard HTML to tck_dashboard branch
-#   The HTML is committed to docs/drools-dashboard.html and served via
-#   GitHub Pages (or browsed directly from the branch).
+# STEP 5 — Refresh baseline (only if master changed or cache missed)
+#   Re-runs Drools TCK against master, saves tck_results.csv, saves to cache.
+#
+# STEP 6 — Test ALL open upstream PRs (always, every run)
+#   For each open PR: clone upstream, merge master locally, run TCK runner.
+#   Results stay on the runner only — never committed to git.
+#
+# STEP 7 — Generate self-contained HTML dashboard (Node.js)
+#   Runs generate_dashboard.js → produces docs/drools-dashboard.html with all
+#   data, CSS and SVG embedded inline.
+#
+# STEP 8 — Commit and push dashboard HTML only
+#   Only docs/drools-dashboard.html is committed — served via GitHub Pages.
+#   No pr-results/, no baseline CSV, no sha file ever committed.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -60,30 +71,17 @@ jobs:
       # ── 2. Sync upstream master ────────────────────────────────────────────
       - name: Sync upstream master
         id: sync
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/dmn-tck/tck.git || true
           git fetch upstream master
-
           git merge upstream/master --no-edit -m "chore: sync upstream master $(date -u +%Y-%m-%d)" || true
           git push origin tck_dashboard 2>/dev/null || true
 
           UPSTREAM_SHA=$(git rev-parse upstream/master)
-          BASELINE_SHA_FILE="TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt"
-          STORED_SHA=$(cat "$BASELINE_SHA_FILE" 2>/dev/null || echo "")
-
-          echo "Upstream master SHA : $UPSTREAM_SHA"
-          echo "Last baseline SHA   : ${STORED_SHA:-<none>}"
-
-          if [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
-            echo "master_changed=false" >> "$GITHUB_OUTPUT"
-            echo "Baseline is up to date — skipping Drools re-run."
-          else
-            echo "master_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Upstream master moved — Drools re-run needed."
-          fi
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          echo "Upstream master SHA: $UPSTREAM_SHA"
 
       # ── 3. Determine run mode ──────────────────────────────────────────────
       - name: Determine run mode
@@ -94,74 +92,43 @@ jobs:
           INPUT="${{ github.event.inputs.upstream_pr }}"
           EVENT="${{ github.event_name }}"
 
-          if [ "$EVENT" = "schedule" ]; then
-            echo "trigger=schedule" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "schedule" ] || [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
             PR_LIST=$(curl -s \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
               | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);process.stdout.write(a.map(p=>p.number).join(' '));}catch(e){}})")
-
-            NEW_PRS=""
-            for PR in $PR_LIST; do
-              if [ ! -f "pr-results/${PR}/meta.json" ]; then
-                NEW_PRS="$NEW_PRS $PR"
-              else
-                LIVE_SHA=$(curl -s \
-                  -H "Authorization: Bearer $GH_TOKEN" \
-                  -H "Accept: application/vnd.github+json" \
-                  "https://api.github.com/repos/dmn-tck/tck/pulls/${PR}" \
-                  | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);process.stdout.write((o.head||{}).sha||'');}catch(e){}})" \
-                  2>/dev/null || echo "")
-                STORED_SHA=$(node -e "try{const d=require('fs').readFileSync('pr-results/${PR}/meta.json','utf8');process.stdout.write(JSON.parse(d).head_sha||'');}catch(e){}" 2>/dev/null || echo "")
-                if [ -n "$LIVE_SHA" ] && [ "$LIVE_SHA" != "$STORED_SHA" ]; then
-                  echo "PR #$PR SHA changed ($STORED_SHA → $LIVE_SHA) — queuing"
-                  NEW_PRS="$NEW_PRS $PR"
-                else
-                  echo "PR #$PR unchanged — skipping"
-                fi
-              fi
-            done
-            NEW_PRS=$(echo $NEW_PRS | xargs)
-            echo "pr_list=$NEW_PRS" >> "$GITHUB_OUTPUT"
-            echo "should_test=$([ -n "$NEW_PRS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-            echo "Schedule mode: PRs to test = '${NEW_PRS:-<none>}'"
-
-          elif [ -n "$INPUT" ] && [ "$INPUT" != "all" ]; then
-            echo "trigger=single"   >> "$GITHUB_OUTPUT"
-            echo "pr_list=$INPUT"   >> "$GITHUB_OUTPUT"
-            echo "should_test=true" >> "$GITHUB_OUTPUT"
-            echo "Manual mode: single PR = $INPUT"
-
-          elif [ "$INPUT" = "all" ]; then
-            PR_LIST=$(curl -s \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/dmn-tck/tck/pulls?state=open&per_page=50" \
-              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const a=JSON.parse(d);process.stdout.write(a.map(p=>p.number).join(' '));}catch(e){}})")
-            echo "trigger=all"      >> "$GITHUB_OUTPUT"
             echo "pr_list=$PR_LIST" >> "$GITHUB_OUTPUT"
             echo "should_test=$([ -n "$PR_LIST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-            echo "Manual mode: all open PRs = '$PR_LIST'"
-
+            [ -z "$INPUT" ] && echo "trigger=refresh" >> "$GITHUB_OUTPUT" || echo "trigger=${EVENT}" >> "$GITHUB_OUTPUT"
+            echo "Mode: all open PRs = '$PR_LIST'"
           else
-            echo "trigger=refresh"  >> "$GITHUB_OUTPUT"
-            echo "pr_list="         >> "$GITHUB_OUTPUT"
-            echo "should_test=false" >> "$GITHUB_OUTPUT"
-            echo "Manual mode: dashboard refresh only"
+            echo "pr_list=$INPUT"   >> "$GITHUB_OUTPUT"
+            echo "should_test=true" >> "$GITHUB_OUTPUT"
+            echo "trigger=single"   >> "$GITHUB_OUTPUT"
+            echo "Mode: single PR = $INPUT"
           fi
 
-      # ── 4. Set up Java 17 ──────────────────────────────────────────────────
+      # ── 4. Restore baseline CSV from cache ────────────────────────────────
+      - name: Restore baseline CSV from cache
+        id: cache-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
+          restore-keys: baseline-drools-
+
+      # ── 5. Set up Java 17 (only if baseline needs rebuild or PRs to test) ──
       - name: Set up JDK 17
-        if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── 5. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
+      # ── 6. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
       - name: Get Drools HEAD SHA
-        if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         id: drools-sha
         run: |
           SHA=$(git ls-remote https://github.com/apache/incubator-kie-drools.git HEAD \
@@ -169,22 +136,22 @@ jobs:
           echo "sha=$SHA"        >> "$GITHUB_OUTPUT"
           echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
 
-      # ── 6. Cache Maven ~/.m2 ──────────────────────────────────────────────
+      # ── 7. Cache Maven ~/.m2 ──────────────────────────────────────────────
       - name: Cache Maven repository
-        if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-drools-${{ steps.drools-sha.outputs.sha }}
           restore-keys: m2-drools-
 
-      # ── 7. Build Drools 999-SNAPSHOT from source ───────────────────────────
+      # ── 8. Build Drools 999-SNAPSHOT from source ───────────────────────────
       - name: Clone apache/incubator-kie-drools
-        if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         run: git clone --depth 1 https://github.com/apache/incubator-kie-drools.git drools-src
 
       - name: Build Drools DMN modules only
-        if: steps.mode.outputs.should_test == 'true' || steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         working-directory: drools-src
         run: |
           mvn install \
@@ -194,34 +161,22 @@ jobs:
             -pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core \
             -am -T 2C -q
 
-      # ── 8. Refresh baseline against fresh master ───────────────────────────
+      # ── 9. Refresh baseline (only on cache miss) ───────────────────────────
       - name: Run Drools TCK against master (refresh baseline)
-        if: steps.sync.outputs.master_changed == 'true'
+        if: steps.cache-baseline.outputs.cache-hit != 'true'
         run: |
           mvn verify --batch-mode --update-snapshots \
             -Pdrools -Dmaven.test.failure.ignore=true \
             --file runners/pom.xml
 
-      - name: Commit updated baseline CSV
-        if: steps.sync.outputs.master_changed == 'true'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          RESULT_CSV="TestResults/Drools/999-SNAPSHOT/tck_results.csv"
-          if [ ! -f "$RESULT_CSV" ]; then
-            echo "WARNING: No tck_results.csv produced — baseline not updated."
-          else
-            git rev-parse upstream/master > TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
-            git add TestResults/Drools/999-SNAPSHOT/tck_results.csv \
-                    TestResults/Drools/999-SNAPSHOT/baseline_master_sha.txt
-            git diff --cached --quiet && echo "Baseline unchanged." || \
-              git commit -m "baseline: refresh after upstream master sync $(date -u +%Y-%m-%d)"
-            git pull --rebase origin tck_dashboard
-            git push origin tck_dashboard
-          fi
+      - name: Save baseline CSV to cache
+        if: steps.cache-baseline.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
 
-      # ── 9. Test each PR in isolated workspace ──────────────────────────────
-      # Results go to pr-results/ on the runner only — NEVER committed to git.
+      # ── 10. Test each open PR (always fresh, never committed) ──────────────
       - name: Test each PR in isolated workspace
         if: steps.mode.outputs.should_test == 'true'
         env:
@@ -325,33 +280,10 @@ jobs:
           }
           EOF
             echo "PR #$PR — $PASS passed / $FAIL failed / $TOTAL total"
-
-            # ── Commit results for this PR immediately ────────────────────────
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add pr-results/${PR}/
-            git diff --cached --quiet && true || \
-              git commit -m "dashboard: results for PR #${PR} @ $(date -u +%Y-%m-%d)"
-            PUSH_OK=false
-            for attempt in 1 2 3; do
-              if git push origin tck_dashboard; then
-                PUSH_OK=true
-                break
-              fi
-              echo "Push attempt $attempt failed — rebasing and retrying"
-              if ! git pull --rebase origin tck_dashboard; then
-                git rebase --abort 2>/dev/null || true
-                echo "## ❌ Push failed for PR #${PR}" >> "$GITHUB_STEP_SUMMARY"
-                exit 1
-              fi
-            done
-            if [ "$PUSH_OK" = "false" ]; then
-              echo "## ❌ Push failed for PR #${PR} after 3 attempts" >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
+            # Results stay on the runner only — never committed to git
           done
 
-      # ── 10. Generate self-contained HTML dashboard (Node.js) ──────────────
+      # ── 11. Generate self-contained HTML dashboard ─────────────────────────
       - name: Generate dashboard HTML
         env:
           GITHUB_TOKEN: ${{ secrets.DASHBOARD_PAT }}
@@ -363,8 +295,8 @@ jobs:
             --token          "$GITHUB_TOKEN" \
             --output         docs/drools-dashboard.html
 
-      # ── 11. Commit and push dashboard HTML ────────────────────────────────
-      - name: Commit and push dashboard
+      # ── 12. Commit and push dashboard HTML (GitHub Pages) ──────────────────
+      - name: Commit and push dashboard HTML
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
