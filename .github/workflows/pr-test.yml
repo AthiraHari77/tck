@@ -259,14 +259,17 @@ jobs:
             cd "$WORKSPACE"
 
             # ── e) Copy results back, discard temp clone ──────────────────────
+            echo "--- TestResults/Drools contents after run (PR #${PR}) ---"
+            find "${WORK_DIR}/TestResults/Drools" -type f | sort || true
+            echo "---"
+
             local RUN_DATE
             RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             mkdir -p "${WORKSPACE}/pr-results/${PR}"
 
-            local RESULT_CSV
-            RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
-            if [ -z "$RESULT_CSV" ]; then
-              echo "WARNING: No tck_results.csv for PR #${PR} — skipping"
+            local RESULT_CSV="${WORK_DIR}/TestResults/Drools/999-SNAPSHOT/tck_results.csv"
+            if [ ! -f "$RESULT_CSV" ]; then
+              echo "WARNING: 999-SNAPSHOT/tck_results.csv not found for PR #${PR} — skipping"
               rm -rf "$WORK_DIR"
               return 0
             fi
