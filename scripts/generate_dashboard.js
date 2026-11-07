@@ -138,6 +138,20 @@ function loadPRResults(dir) {
   return results;
 }
 
+// PRs skipped because they conflict with master (meta.json only, no CSV)
+function loadPRConflicts(dir) {
+  const conflicts = new Set();
+  if (!fs.existsSync(dir)) return conflicts;
+  for (const entry of fs.readdirSync(dir)) {
+    const metaPath = path.join(dir, entry, 'meta.json');
+    const prNum = parseInt(entry, 10);
+    if (isNaN(prNum) || !fs.existsSync(metaPath)) continue;
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (meta.merge_conflict && meta.skipped) conflicts.add(prNum);
+  }
+  return conflicts;
+}
+
 function getLevelTotals(csvPath) {
   if (!fs.existsSync(csvPath)) return {};
   const lines = fs.readFileSync(csvPath, 'utf8').split('\n');
@@ -197,6 +211,7 @@ async function main() {
   const baselineKeys = new Set(baselineFailures.map(f => f.key));
   const levelTotals  = getLevelTotals(BASELINE_CSV);
   const prResults    = loadPRResults(PR_RESULTS_DIR);
+  const prConflicts  = loadPRConflicts(PR_RESULTS_DIR);
   console.log(`Loaded results for PRs: ${Object.keys(prResults).sort().join(', ') || 'none'}`);
 
   console.log(`Fetching open PRs from ${UPSTREAM_REPO}…`);
@@ -303,7 +318,9 @@ async function main() {
     let rowCls, resultCell, scoreCell;
     if (!res) {
       rowCls     = 'pr-row-pending';
-      resultCell = '<span class="badge badge-notested">not tested</span>';
+      resultCell = prConflicts.has(pr.number)
+        ? '<span class="badge badge-conflict">⚠ merge conflict — not tested, needs rebase</span>'
+        : '<span class="badge badge-notested">not tested</span>';
       scoreCell  = '<span style="color:#9ca3af;font-size:12px;">—</span>';
     } else {
       const newFails = res.failures.filter(f => !baselineKeys.has(f.key));
@@ -346,7 +363,7 @@ async function main() {
   <thead><tr><th style="width:52px">PR</th><th>Title</th><th>Drools result</th><th style="width:130px">Pass rate</th></tr></thead>
   <tbody>${prRows}</tbody>
 </table></div>
-<p class="footnote">Results tested as if each PR branch were synced with master (local merge before run).</p>`
+<p class="footnote">Results tested as if each PR branch were synced with master (local merge before run). PRs that conflict with master are not tested.</p>`
     : '<p style="font-size:13px;color:#57606a;padding:8px 0;">No open upstream PRs.</p>';
 
   // Drilldown
