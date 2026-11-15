@@ -43,7 +43,7 @@ function ghGet(apiPath) {
       path: apiPath,
       headers: {
         'Accept': 'application/vnd.github+json',
-        'User-Agent': 'bamoe-tck-dashboard/1.0',
+        'User-Agent': 'tck-dashboard/1.0',
         ...(TOKEN ? { 'Authorization': `Bearer ${TOKEN}` } : {})
       }
     };
@@ -375,7 +375,8 @@ async function main() {
     if (exFails.length) notes += `<span style="font-size:11px;color:#57606a;">${exFails.length} pre-existing excluded</span>`;
     const rows = newFails.sort((a, b) => `${a.level}${a.suite}${a.caseId}`.localeCompare(`${b.level}${b.suite}${b.caseId}`))
       .map(f => {
-        const ghUrl = `https://github.com/dmn-tck/tck/tree/master/TestCases/${esc(f.suitePath)}`;
+        const ref = pr.headSha || 'master';
+        const ghUrl = `https://github.com/${UPSTREAM_REPO}/tree/${ref}/TestCases/${esc(f.suitePath)}`;
         return `<tr class="row-new">
   <td><span class="badge badge-gray">${esc(f.level)}</span></td>
   <td class="mono"><a href="${ghUrl}" target="_blank" rel="noopener">${esc(f.suite)}</a></td>

@@ -1,4 +1,4 @@
-name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
+name: "TCK Dashboard — Sync, Baseline & Refresh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WHAT THIS WORKFLOW DOES
@@ -223,8 +223,8 @@ jobs:
               https://github.com/dmn-tck/tck.git "$WORK_DIR"
 
             cd "$WORK_DIR"
-            git config user.email "ci@bamoe-dashboard.local"
-            git config user.name  "BAMOE CI"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name  "github-actions[bot]"
 
             # ── b) Fetch the PR's branch from public upstream ─────────────────
             git fetch origin "pull/${PR}/head:pr-${PR}" || {
