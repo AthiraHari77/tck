@@ -123,26 +123,8 @@ jobs:
             echo "Mode: all open PRs = '$PR_LIST'"
           fi
 
-      # ── 4. Restore baseline CSV from cache ────────────────────────────────
-      - name: Restore baseline CSV from cache
-        id: cache-baseline
-        uses: actions/cache/restore@v4
-        with:
-          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
-          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
-          restore-keys: baseline-drools-
-
-      # ── 5. Set up Java 17 ─────────────────────────────────────────────────
-      - name: Set up JDK 17
-        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # ── 6. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
+      # ── 4. Get Drools HEAD SHA (Maven & Baseline cache key) ────────────────
       - name: Get Drools HEAD SHA
-        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         id: drools-sha
         run: |
           set -eo pipefail
@@ -151,6 +133,25 @@ jobs:
           echo "sha=$SHA"        >> "$GITHUB_OUTPUT"
           echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
           echo "Drools HEAD SHA: $SHA"
+
+      # ── 5. Restore baseline CSV from cache ────────────────────────────────
+      - name: Restore baseline CSV from cache
+        id: cache-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}-${{ steps.drools-sha.outputs.sha }}
+          restore-keys: |
+            baseline-drools-${{ steps.sync.outputs.upstream_sha }}-
+            baseline-drools-
+
+      # ── 6. Set up Java 17 ─────────────────────────────────────────────────
+      - name: Set up JDK 17
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
       # ── 7. Cache Maven ~/.m2 ──────────────────────────────────────────────
       - name: Cache Maven repository
@@ -201,7 +202,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
-          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}-${{ steps.drools-sha.outputs.sha }}
 
       # ── 10. Test each open PR (always fresh, never committed) ──────────────
       - name: Test each PR in isolated workspace
