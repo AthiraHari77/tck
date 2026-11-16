@@ -1,0 +1,82 @@
+{
+  "template": "assets/IBM-Template_AI-Ready.pptx",
+  "meta": {
+    "default_footer": "IBM Confidential"
+  },
+  "deck": [
+    {
+      "slide_no": 2,
+      "id": "cover_slide",
+      "layout_code": "COVER-02"
+    },
+    {
+      "slide_no": 22,
+      "id": "context_slide",
+      "layout_code": "CONTENT-2COL"
+    },
+    {
+      "slide_no": 11,
+      "id": "baseline_stats",
+      "layout_code": "STATS-3UP"
+    },
+    {
+      "slide_no": 28,
+      "id": "pillars_grid",
+      "layout_code": "GRID-4UP-01"
+    },
+    {
+      "slide_no": 24,
+      "id": "features_wins",
+      "layout_code": "CONTENT-2COL-HEADERS"
+    },
+    {
+      "slide_no": 6,
+      "id": "qa_divider",
+      "layout_code": "SECTION-01"
+    }
+  ],
+  "content": {
+    "cover_slide": {
+      "title": "Drools TCK compatibility dashboard demo",
+      "name_and_job_title": "DMN Compatibility & Automation Team",
+      "contact_details": "Apache KIE Drools continuous integration"
+    },
+    "context_slide": {
+      "title": "Modernizing DMN compliance reviews for Drools",
+      "body_copy_01": "Manual and noisy compliance tracking:\n  Known gaps on master (9 baseline failures) led to noise\n  PR failures were difficult to isolate from master gaps\n  Slow integration cycle due to manual verification",
+      "body_copy_02": "Automated and isolated PR evaluations:\n  Fully automates upstream PR compatibility checks\n  Isolates master failures from net-new regressions\n  Provides reviewers with noise-free health reports"
+    },
+    "baseline_stats": {
+      "title": "Current DMN compliance baseline for Drools 999-SNAPSHOT",
+      "statistic_01": "4,200+",
+      "statistic_claim_01": "Total TCK test cases executed on master",
+      "statistic_02": "9",
+      "statistic_claim_02": "Pre-existing baseline failures on master",
+      "statistic_03": "99.8%",
+      "statistic_claim_03": "Overall test pass rate on master branch",
+      "statistic_sources": "Source: dmn-tck/tck master branch baseline test results"
+    },
+    "pillars_grid": {
+      "header": "ENGINEERING DEEP DIVE",
+      "title": "The four pillars of our automation pipeline",
+      "body_copy_title_01": "1. Sync & triggers",
+      "body_copy_01": "Runs weekly or on-demand. Merges latest upstream TCK master to keep test definitions in sync.",
+      "body_copy_title_02": "2. Smart caching",
+      "body_copy_02": "Caches maven dependencies and only compiles DMN modules. caches baseline results to skip runs.",
+      "body_copy_title_03": "3. Isolated testing",
+      "body_copy_03": "Spins up temporary workspaces. clones, merges, and tests each PR against drools. flags conflicts.",
+      "body_copy_title_04": "4. Auto-publish",
+      "body_copy_04": "Aggregates test run metadata and renders clean HTML. Deploys using a robust push-with-retry rebase."
+    },
+    "features_wins": {
+      "title": "Delivering highly actionable reviews for developers",
+      "body_copy_title_01": "Regression noise isolation",
+      "body_copy_01": "Isolating regressions from baseline gaps:\n  Separates pre-existing gaps from new PR bugs\n  Color-coded PR rows (green/yellow/red) for safety\n  Immediate alerts for merge conflicts and stale runs",
+      "body_copy_title_02": "Direct-to-PR links",
+      "body_copy_02": "Precision link redirection:\n  Shows level, suite, and failure message drilldowns\n  Links point to the PR's exact head commit SHA\n  Prevents 404 errors for newly added test folders"
+    },
+    "qa_divider": {
+      "title": "Questions & Answers"
+    }
+  }
+}

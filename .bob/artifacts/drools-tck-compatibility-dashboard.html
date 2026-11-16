@@ -1,0 +1,416 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Drools TCK Dashboard — 999-SNAPSHOT</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px; line-height: 1.6;
+  background: #fff; color: #1f2328;
+  padding: 24px 20px 56px;
+}
+.page { max-width: 820px; margin: 0 auto; }
+
+.header { border-bottom: 1px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 22px; }
+.header h1 { font-size: 19px; font-weight: 700; }
+.header-meta { font-size: 12px; color: #57606a; margin-top: 5px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.header-meta a { color: #3b82d4; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-fail    { background: #fee2e2; color: #991b1b; }
+.badge-warn    { background: #fef3c7; color: #92400e; }
+.badge-info    { background: #dbeafe; color: #1e40af; }
+.badge-purple  { background: #ede9fe; color: #5b21b6; }
+.badge-gray    { background: #f3f4f6; color: #374151; }
+
+section { margin-bottom: 30px; }
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 14px; }
+
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.kpi { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 13px 12px; text-align: center; }
+.kpi-value { font-size: 24px; font-weight: 700; line-height: 1.15; }
+.kpi-label { font-size: 11px; color: #57606a; margin-top: 3px; }
+.green { color: #065f46; } .red { color: #991b1b; } .orange { color: #92400e; } .blue { color: #1e40af; }
+
+.charts-row { display: grid; grid-template-columns: 220px 1fr; gap: 12px; margin-bottom: 14px; align-items: start; }
+.chart-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 16px; }
+.chart-title { font-size: 12px; font-weight: 600; color: #57606a; margin-bottom: 10px; }
+.bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bar-wrap:last-child { margin-bottom: 0; }
+.bar-label { font-size: 12px; color: #57606a; white-space: nowrap; min-width: 100px; }
+.bar-label-lg { min-width: 148px; }
+.bar-track { flex: 1; height: 13px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 3px; }
+.bar-val   { font-size: 11px; color: #57606a; min-width: 60px; text-align: right; white-space: nowrap; }
+
+.vc-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; margin-bottom: 8px; }
+.vc-head { font-size: 12px; font-weight: 700; color: #57606a; margin-bottom: 8px; }
+.vc-stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f0f1f3; gap: 8px; }
+.vc-stat:last-child { border-bottom: none; }
+.vc-stat span:first-child { color: #57606a; }
+.vc-stat a { color: #3b82d4; text-decoration: none; }
+
+.table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: #f7f8fa; text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #57606a; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #f0f1f3; }
+tbody tr:last-child { border-bottom: none; }
+tbody td { padding: 9px 10px; vertical-align: top; }
+tbody tr:hover { background: #fafbfc; }
+.mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; }
+code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; }
+.empty-row td { text-align: center; color: #57606a; padding: 20px; font-size: 13px; }
+
+.pr-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pr-col { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; }
+.pr-col-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding-bottom: 7px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
+.pr-col-title.open   { color: #1e40af; }
+.pr-col-title.draft  { color: #5b21b6; }
+.pr-col-title.merged { color: #065f46; }
+.pr-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px 9px; font-size: 12px; line-height: 1.5; }
+.pr-card a { color: #3b82d4; text-decoration: none; }
+.pr-card a:hover { text-decoration: underline; }
+.pr-name   { font-weight: 600; color: #1f2328; margin-bottom: 2px; }
+.pr-branch { font-size: 10.5px; color: #57606a; font-family: "SFMono-Regular", Consolas, monospace; word-break: break-all; margin-bottom: 4px; }
+.pr-meta   { font-size: 11px; color: #57606a; }
+.pr-empty  { font-size: 12px; color: #9ca3af; text-align: center; padding: 8px 0; }
+
+.timeline { position: relative; padding-left: 20px; }
+.tl-line { position: absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; background: #e5e7eb; }
+.tl-item { position: relative; margin-bottom: 16px; }
+.tl-item:last-child { margin-bottom: 0; }
+.tl-dot { position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; }
+.tl-dot.green { background: #059669; } .tl-dot.blue { background: #3b82d4; }
+.tl-date { font-size: 11px; color: #57606a; }
+.tl-date a { color: #57606a; }
+.tl-text { font-size: 13px; }
+
+.footnote { font-size: 11px; color: #57606a; margin-top: 7px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+
+<div class="header">
+  <h1>Drools TCK Compatibility Dashboard</h1>
+  <div class="header-meta">
+    <span>Source: <a href="https://github.com/dmn-tck/tck" target="_blank" rel="noopener">github.com/dmn-tck/tck</a> · master</span>
+    <span>Engine: <strong>Apache KIE Drools</strong> 999-SNAPSHOT</span>
+    <span>Results date: <strong>2026-06-30</strong></span>
+    <span>Dashboard generated: <strong>2026-06-30 06:29 UTC</strong></span>
+  </div>
+</div>
+
+
+<section>
+  <div class="section-title">Overview — Apache KIE Drools 999-SNAPSHOT</div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-value green">3,375</div><div class="kpi-label">Tests Passing</div></div>
+    <div class="kpi"><div class="kpi-value red">17</div><div class="kpi-label">Tests Failing</div></div>
+    <div class="kpi"><div class="kpi-value blue">5</div><div class="kpi-label">Suites Affected</div></div>
+    <div class="kpi"><div class="kpi-value orange">99.50%</div><div class="kpi-label">Pass Rate</div></div>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-box">
+      <div class="chart-title">Pass / Fail split</div>
+      <svg width="100%" style="display:block">
+        <circle cx="90" cy="68" r="46" fill="none" stroke="#e5e7eb" stroke-width="20"></circle>
+        <circle cx="90" cy="68" r="46" fill="none" stroke="#059669" stroke-width="20"></circle>
+        <circle cx="90" cy="68" r="46" fill="none" stroke="#ef4444" stroke-width="20"></circle>
+        <text x="90" y="63" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">99.50%</text>
+        <text x="90" y="78" text-anchor="middle" font-size="10" fill="#57606a">pass rate</text>
+        <rect x="22" y="126" width="10" height="10" rx="2" fill="#059669"></rect>
+        <text x="36" y="136" font-size="11" fill="#374151">Pass — 3,375</text>
+        <rect x="110" y="126" width="10" height="10" rx="2" fill="#ef4444"></rect>
+        <text x="124" y="136" font-size="11" fill="#374151">Fail — 17</text>
+      </svg>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Results by compliance level</div>
+      <div class="bar-wrap">
+        <div class="bar-label">Level-2</div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:#059669"></div></div>
+        <div class="bar-val">116 / 116</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label">Level-3</div>
+        <div class="bar-track"><div class="bar-fill" style="width:99.5%;background:#f59e0b"></div></div>
+        <div class="bar-val">3,259 / 3,276</div>
+      </div>
+      <div style="height:8px"></div>
+      <div class="bar-wrap">
+        <div class="bar-label bar-label-lg">0068-feel-equality</div>
+        <div class="bar-track"><div class="bar-fill" style="width:98.2%;background:#f59e0b"></div></div>
+        <div class="bar-val">112 / 114</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label bar-label-lg">0085-decision-services</div>
+        <div class="bar-track"><div class="bar-fill" style="width:94.4%;background:#f59e0b"></div></div>
+        <div class="bar-val">17 / 18</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label bar-label-lg">0093-feel-at-literals</div>
+        <div class="bar-track"><div class="bar-fill" style="width:94.7%;background:#f59e0b"></div></div>
+        <div class="bar-val">18 / 19</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label bar-label-lg">0100-arithmetic</div>
+        <div class="bar-track"><div class="bar-fill" style="width:98.9%;background:#f59e0b"></div></div>
+        <div class="bar-val">1,075 / 1,087</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label bar-label-lg">1157-implicit-conversions</div>
+        <div class="bar-track"><div class="bar-fill" style="width:0%;background:#ef4444"></div></div>
+        <div class="bar-val">0 / 1</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vc-box">
+    <div class="vc-head">Apache KIE Drools 999-SNAPSHOT · Results last updated: 2026-06-30</div>
+    <div class="vc-stat"><span>Total tests</span><strong>3,392</strong></div>
+    <div class="vc-stat"><span>Passing</span><strong class="green">3,375</strong></div>
+    <div class="vc-stat"><span>Failing</span><strong class="red">17</strong></div>
+    <div class="vc-stat"><span>Compliance Level-2</span><strong>116 / 116</strong></div>
+    <div class="vc-stat"><span>Compliance Level-3</span><strong>3,259 / 3,276</strong></div>
+    <div class="vc-stat"><span>Result version</span>
+      <a href="https://github.com/dmn-tck/tck/tree/master/TestResults/Drools/999-SNAPSHOT" target="_blank" rel="noopener">999-SNAPSHOT</a>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">
+    Failing Tests
+    <span class="badge badge-fail" style="margin-left:6px">17 failures</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Suite</th><th>Case ID</th><th>Test</th><th>Failure Message</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0068-feel-equality" target="_blank" rel="noopener">0068-feel-equality</a></td>
+          <td class="mono">range_010</td>
+          <td class="mono">0068-feel-equality-test-01</td>
+          <td><code>expected='false' but found='true'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0068-feel-equality" target="_blank" rel="noopener">0068-feel-equality</a></td>
+          <td class="mono">range_012</td>
+          <td class="mono">0068-feel-equality-test-01</td>
+          <td><code>expected='true' but found='null'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0085-decision-services" target="_blank" rel="noopener">0085-decision-services</a></td>
+          <td class="mono">015</td>
+          <td class="mono">0085-decision-services-test-01</td>
+          <td><code>'decision_015_2' expected='15_2' but found='null'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0093-feel-at-literals" target="_blank" rel="noopener">0093-feel-at-literals</a></td>
+          <td class="mono">datetime_006</td>
+          <td class="mono">0093-feel-at-literals-test-01</td>
+          <td><code>expected='2018-12-08T10:30:11+11:00' but found='2018-12-08T10:30:11+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dateAndTime_to_rhs_dtDuration_002</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-13T11:10:10+11:00' but found='2021-01-13T11:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dateAndTime_to_rhs_dtDuration_011</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-01T11:10:10+11:00' but found='2021-01-01T11:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dateAndTime_to_rhs_dtDuration_012</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-01T09:10:10+11:00' but found='2021-01-01T09:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dateAndTime_to_rhs_ymDuration_007</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-02-01T10:10:10+11:00' but found='2021-02-01T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dateAndTime_to_rhs_ymDuration_008</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2020-12-01T10:10:10+11:00' but found='2020-12-01T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dtDuration_to_rhs_dateAndTime_002</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-13T11:10:10+11:00' but found='2021-01-13T11:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dtDuration_to_rhs_dateAndTime_011</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-01T11:10:10+11:00' but found='2021-01-01T11:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_dtDuration_to_rhs_dateAndTime_012</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-01-01T09:10:10+11:00' but found='2021-01-01T09:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_ymDuration_to_rhs_dateAndTime_007</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2021-02-01T10:10:10+11:00' but found='2021-02-01T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">add_lhs_ymDuration_to_rhs_dateAndTime_008</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2020-12-01T10:10:10+11:00' but found='2020-12-01T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">subtract_lhs_dateAndTime_minus_rhs_dtDuration_004</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2020-12-31T10:10:10+11:00' but found='2020-12-31T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/0100-arithmetic" target="_blank" rel="noopener">0100-arithmetic</a></td>
+          <td class="mono">subtract_lhs_dateAndTime_minus_rhs_ymDuration_007</td>
+          <td class="mono">0100-arithmetic-test-01</td>
+          <td><code>expected='2020-01-01T10:10:10+11:00' but found='2020-01-01T10:10:10+11:00'</code></td>
+        </tr>
+        <tr>
+          <td class="mono" style="white-space:nowrap"><span class="badge badge-gray">L3</span> <a href="https://github.com/dmn-tck/tck/tree/master/TestCases/compliance-level-3/1157-implicit-conversions" target="_blank" rel="noopener">1157-implicit-conversions</a></td>
+          <td class="mono">009</td>
+          <td class="mono">1157-implicit-conversions-test-01</td>
+          <td><code>'Body 3' expected='2000-01-02T00:00:00Z' but found='2000-01-02T00:00Z'</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="footnote">Showing 17 failures from 999-SNAPSHOT committed results.</p>
+</section>
+
+
+<section>
+  <div class="section-title">Open Pull Requests — <a href="https://github.com/dmn-tck/tck/pulls" target="_blank" rel="noopener" style="color:#3b82d4;text-transform:none;font-weight:400">github.com/dmn-tck/tck/pulls</a></div>
+  <div class="chart-box" style="margin-bottom:14px">
+    <div class="chart-title">PRs by status</div>
+    <div class="bar-wrap">
+      <div class="bar-label">Open / Ready</div>
+      <div class="bar-track"><div class="bar-fill" style="width:100%;background:#3b82d4"></div></div>
+      <div class="bar-val">3</div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Draft / WIP</div>
+      <div class="bar-track"><div class="bar-fill" style="width:0%;background:#7c5cd8"></div></div>
+      <div class="bar-val">0</div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Recently Merged</div>
+      <div class="bar-track"><div class="bar-fill" style="width:100%;background:#059669"></div></div>
+      <div class="bar-val">3</div>
+    </div>
+  </div>
+  <div class="pr-columns">
+    <div class="pr-col">
+      <div class="pr-col-title open">Open / Ready (3)</div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/730" target="_blank" rel="noopener">#730 Replace ZonedDateTime with FormattedZonedDateTime to Fix Seconds Precision</a></div>
+        <div class="pr-branch">AthiraHari77:update_changes_for_zoneddatettime</div>
+        <div class="pr-meta">AthiraHari77  ·  2026-05-01  <span class="badge badge-purple">Drools</span></div>
+      </div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/717" target="_blank" rel="noopener">#717 Add tests for implicit conversions in Decisions, BKMs and DSs.</a></div>
+        <div class="pr-branch">opatrascoiu:1157-implicit-conversions</div>
+        <div class="pr-meta">opatrascoiu  ·  2026-03-01</div>
+      </div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/714" target="_blank" rel="noopener">#714 Updating test cases for comparison of DMN FEEL range in unary format</a></div>
+        <div class="pr-branch">AthiraHari77:update_tests_for_range_in_unary_format</div>
+        <div class="pr-meta">AthiraHari77  ·  2026-04-01  <span class="badge badge-purple">Drools</span></div>
+      </div>
+    </div>
+    <div class="pr-col">
+      <div class="pr-col-title draft">Draft / WIP (0)</div>
+      <div class="pr-empty">No draft PRs</div>
+    </div>
+    <div class="pr-col">
+      <div class="pr-col-title merged">Recently Merged</div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/742" target="_blank" rel="noopener">#742 DMN Drools engine Multiple DMN-XML pair support</a></div>
+        <div class="pr-branch">origin:master</div>
+        <div class="pr-meta">mmortari  ·  2026-06-01</div>
+      </div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/734" target="_blank" rel="noopener">#734 Apache KIE results updated to 10.2.0 version</a></div>
+        <div class="pr-branch">origin:master</div>
+        <div class="pr-meta">mmortari  ·  2026-04-27  <span class="badge badge-purple">Drools</span></div>
+      </div>
+      <div class="pr-card">
+        <div class="pr-name"><a href="https://github.com/dmn-tck/tck/pull/729" target="_blank" rel="noopener">#729 Add new test cases for decision services</a></div>
+        <div class="pr-branch">origin:master</div>
+        <div class="pr-meta">mmortari  ·  2026-04-16</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">New Test Suites — Not Yet in Drools Results</div>
+  <p style="font-size:12px;color:#57606a;margin-bottom:10px">
+    Suites under <code>TestCases/compliance-level-3/</code> on master with
+    <strong>no entry</strong> in the latest Drools result CSV — potential undetected failures.
+  </p>
+  <div style="font-size:13px;color:#057a55;padding:8px 0">✅ All compliance-level-3 suites are represented in the latest Drools result CSV.</div>
+</section>
+
+
+<section>
+  <div class="section-title">Recent Commits — TestResults/Drools &amp; Runner</div>
+  <div class="timeline">
+    <div class="tl-line"></div>
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-date">2026-06-23 · <a href="https://github.com/dmn-tck/tck/commit/b61ef7e" target="_blank" rel="noopener">b61ef7e</a></div>
+      <div class="tl-text">update changes to support decisionservice result comparison</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot blue"></div>
+      <div class="tl-date">2026-06-01 · <a href="https://github.com/dmn-tck/tck/commit/370ceb5" target="_blank" rel="noopener">370ceb5</a> · <a href="https://github.com/dmn-tck/tck/pull/742" target="_blank" rel="noopener">PR #742</a></div>
+      <div class="tl-text">DMN Drools engine Multiple DMN-XML pair support (#742)</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-date">2026-04-27 · <a href="https://github.com/dmn-tck/tck/commit/0fdecae" target="_blank" rel="noopener">0fdecae</a> · <a href="https://github.com/dmn-tck/tck/pull/734" target="_blank" rel="noopener">PR #734</a></div>
+      <div class="tl-text">Apache KIE results updated to 10.2.0 version (#734)</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot green"></div>
+      <div class="tl-date">2026-04-16 · <a href="https://github.com/dmn-tck/tck/commit/fa3fdfe" target="_blank" rel="noopener">fa3fdfe</a> · <a href="https://github.com/dmn-tck/tck/pull/729" target="_blank" rel="noopener">PR #729</a></div>
+      <div class="tl-text">Add new test cases for decision services (#729)</div>
+    </div>
+  </div>
+</section>
+
+</div>
+<footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:32px;padding-top:12px;max-width:820px;margin-left:auto;margin-right:auto">
+  Auto-generated · Data from <a href="https://github.com/dmn-tck/tck" target="_blank" rel="noopener" style="color:#9ca3af">github.com/dmn-tck/tck</a> · Made with IBM Bob
+</footer>
+</body>
+</html>

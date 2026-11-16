@@ -1,0 +1,234 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TCK Compatibility Dashboard — Task Summary</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px; line-height: 1.6;
+  background: #fff; color: #1f2328;
+  padding: 32px 20px 56px;
+}
+.page { max-width: 760px; margin: 0 auto; }
+
+.header { border-bottom: 2px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 26px; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header-sub { font-size: 13px; color: #57606a; margin-top: 4px; }
+
+section { margin-bottom: 28px; }
+.section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: #57606a; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 12px;
+}
+
+p { font-size: 13px; color: #1f2328; margin-bottom: 8px; }
+
+.flow {
+  display: flex; flex-wrap: wrap; gap: 0; align-items: center;
+  background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 14px 16px; margin-bottom: 4px;
+}
+.flow-step {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 5px;
+  padding: 7px 12px; font-size: 12px; text-align: center; min-width: 130px;
+}
+.flow-step strong { display: block; font-size: 11px; font-weight: 700; color: #3b82d4; margin-bottom: 2px; }
+.arrow { font-size: 16px; color: #9ca3af; padding: 0 6px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card {
+  background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 12px 14px;
+}
+.card-title { font-size: 12px; font-weight: 700; color: #1f2328; margin-bottom: 6px; }
+.card ul { padding-left: 16px; }
+.card li { font-size: 12px; color: #374151; margin-bottom: 3px; }
+
+.file-list { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; }
+.file-row { display: flex; gap: 12px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #f0f1f3; }
+.file-row:last-child { border-bottom: none; }
+.file-name { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; color: #3b82d4; min-width: 290px; }
+.file-desc { font-size: 12px; color: #57606a; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.badge-blue   { background: #dbeafe; color: #1e40af; }
+.badge-green  { background: #d1fae5; color: #065f46; }
+.badge-purple { background: #ede9fe; color: #5b21b6; }
+.badge-gray   { background: #f3f4f6; color: #374151; }
+
+.steps { counter-reset: step; }
+.step { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+.step-num {
+  counter-increment: step;
+  min-width: 24px; height: 24px; border-radius: 50%;
+  background: #3b82d4; color: #fff;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+.step-body { font-size: 13px; }
+.step-body strong { color: #1f2328; }
+.step-body span { color: #57606a; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>TCK Compatibility Dashboard for Drools</h1>
+  <div class="header-sub">BAMOE Team · Private CI Dashboard · Task Summary</div>
+</div>
+
+
+<section>
+  <div class="section-title">Problem</div>
+  <p>The BAMOE team was manually monitoring the upstream <strong>dmn-tck/tck</strong> repository for new PRs, hand-copying test cases locally, building Drools <code>999-SNAPSHOT</code> from source, running tests, and fixing failures — all with no shared visibility, no automation, and no central tracking.</p>
+</section>
+
+
+<section>
+  <div class="section-title">Solution</div>
+  <p>A <strong>private CI dashboard repo</strong> in the team's GitHub org that automates the entire workflow end-to-end and serves a live dashboard to the whole team via GitHub Pages.</p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>Upstream</strong>dmn-tck/tck<br />new PR / nightly</div>
+    <div class="arrow">→</div>
+    <div class="flow-step"><strong>CI: Build Drools</strong>apache/incubator-kie-drools<br />999-SNAPSHOT from source</div>
+    <div class="arrow">→</div>
+    <div class="flow-step"><strong>CI: Run TCK</strong>mvn verify -Pdrools<br />all test cases</div>
+    <div class="arrow">→</div>
+    <div class="flow-step"><strong>Generate HTML</strong>reads CSV + GitHub API<br />PR board + results</div>
+    <div class="arrow">→</div>
+    <div class="flow-step"><strong>GitHub Pages</strong>private team URL<br />live dashboard</div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">Key Design Decisions</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Private repo, not a fork</div>
+      <ul>
+        <li>Lives in the team's GitHub org</li>
+        <li>Visible only to BAMOE team members</li>
+        <li>No manual syncing from upstream needed</li>
+        <li>CI fetches upstream directly via API</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Drools built from source in CI</div>
+      <ul>
+        <li>999-SNAPSHOT is never published to any repo</li>
+        <li>Clones apache/incubator-kie-drools at HEAD</li>
+        <li>Maven cache keyed on Drools HEAD SHA</li>
+        <li>Cache hit: ~10 min · Cache miss: ~60 min</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Test specific upstream PRs</div>
+      <ul>
+        <li>Workflow can be triggered manually</li>
+        <li>Pass an upstream PR number as input</li>
+        <li>CI merges that PR branch on top of master</li>
+        <li>Dashboard shows which PR was tested</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Dashboard auto-updates</div>
+      <ul>
+        <li>Runs nightly at 02:00 UTC automatically</li>
+        <li>Commits results + HTML back to the repo</li>
+        <li>GitHub Pages serves the latest HTML</li>
+        <li>No manual steps needed after initial setup</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">Files Delivered</div>
+  <div class="file-list">
+    <div class="file-row">
+      <div class="file-name">.github/workflows/tck-dashboard.yml</div>
+      <div class="file-desc">Full CI workflow — build Drools, run TCK, generate &amp; commit dashboard</div>
+    </div>
+    <div class="file-row">
+      <div class="file-name">scripts/generate_dashboard.py</div>
+      <div class="file-desc">Python script — reads CSV, queries GitHub PR API, produces HTML</div>
+    </div>
+    <div class="file-row">
+      <div class="file-name">docs/index.html</div>
+      <div class="file-desc">Placeholder page (replaced by CI after first run)</div>
+    </div>
+    <div class="file-row">
+      <div class="file-name">README.md</div>
+      <div class="file-desc">Full setup instructions — PAT, secrets, GitHub Pages config</div>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">Dashboard Sections</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Overview KPIs</div>
+      <ul>
+        <li>Tests passing / failing</li>
+        <li>Open upstream PRs count</li>
+        <li>PRs that introduce new test cases</li>
+        <li>Pass rate donut chart</li>
+        <li>Compliance Level-2 / Level-3 bars</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">PR Board</div>
+      <ul>
+        <li>Open PRs — with test-suite badges</li>
+        <li>Recently merged PRs</li>
+        <li>Closed (unmerged) PRs</li>
+        <li>Links to upstream GitHub PR pages</li>
+        <li>Author, branch, date per card</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Failing Tests Table</div>
+      <ul>
+        <li>Suite, case ID, test name, message</li>
+        <li>Links to upstream TestCases/ files</li>
+        <li>Compliance level badge per row</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Run Info Bar</div>
+      <ul>
+        <li>Timestamp of last CI run</li>
+        <li>Drools commit SHA tested</li>
+        <li>Which upstream PR was merged (if any)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <div class="section-title">Setup Steps (one-time)</div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Create private repo</strong> in your org and push this code to it.</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Create a PAT</strong> with <code>repo</code> write scope and add it as secret <code>DASHBOARD_PAT</code>.</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Enable GitHub Pages</strong> → branch <code>main</code> → folder <code>/docs</code>.</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Trigger once manually</strong> via Actions → Run workflow. Dashboard goes live immediately after.</div></div>
+  </div>
+</section>
+
+</div>
+<footer style="text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:32px;padding-top:12px;max-width:760px;margin-left:auto;margin-right:auto">
+  Made with IBM Bob
+</footer>
+</body>
+</html>

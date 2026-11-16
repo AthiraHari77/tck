@@ -1,0 +1,622 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BAMOE TCK Dashboard — How It Works</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px; line-height: 1.7;
+  background: #fff; color: #1f2328;
+  padding: 32px 20px 64px;
+}
+.page { max-width: 780px; margin: 0 auto; }
+
+h1 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.subtitle { font-size: 13px; color: #57606a; margin-bottom: 32px; }
+
+h2 { font-size: 15px; font-weight: 700; margin: 32px 0 10px; padding-bottom: 6px;
+     border-bottom: 2px solid #e5e7eb; color: #1f2328; }
+h3 { font-size: 13px; font-weight: 700; margin: 20px 0 6px; color: #374151; }
+
+p { margin-bottom: 12px; }
+ul, ol { padding-left: 20px; margin-bottom: 12px; }
+li { margin-bottom: 5px; }
+
+.callout {
+  background: #f0f9ff; border: 1px solid #bae6fd; border-left: 4px solid #0ea5e9;
+  border-radius: 6px; padding: 12px 14px; margin: 14px 0; font-size: 13px; color: #0c4a6e;
+}
+.callout.warn {
+  background: #fff7ed; border-color: #fed7aa; border-left-color: #f97316; color: #7c2d12;
+}
+.callout.green {
+  background: #f0fdf4; border-color: #bbf7d0; border-left-color: #16a34a; color: #14532d;
+}
+
+.file-label {
+  display: inline-block; font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px; background: #f3f4f6; border: 1px solid #d1d5db;
+  border-radius: 4px; padding: 1px 7px; color: #374151; margin-bottom: 8px;
+}
+
+.step {
+  display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start;
+}
+.step-num {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+  background: #1f2328; color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; margin-top: 2px;
+}
+.step-body { flex: 1; }
+.step-body strong { display: block; font-size: 13px; margin-bottom: 3px; }
+
+code {
+  font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px;
+  background: #f3f4f6; border: 1px solid #e5e7eb;
+  padding: 1px 5px; border-radius: 3px; word-break: break-all;
+}
+pre {
+  font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px;
+  background: #f6f8fa; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 12px 14px; overflow-x: auto; margin: 10px 0 14px; line-height: 1.6;
+  color: #24292f;
+}
+
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; vertical-align: middle;
+}
+.b-red   { background: #fee2e2; color: #991b1b; }
+.b-amber { background: #fef3c7; color: #92400e; }
+.b-green { background: #d1fae5; color: #065f46; }
+.b-gray  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 16px; }
+thead th { background: #f7f8fa; text-align: left; padding: 7px 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb; color: #57606a; }
+tbody td { padding: 7px 10px; border-bottom: 1px solid #f0f1f3; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+
+.toc { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 14px 18px; margin-bottom: 28px; }
+.toc-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #57606a; margin-bottom: 8px; }
+.toc ol { margin: 0; padding-left: 18px; }
+.toc li { margin-bottom: 3px; font-size: 13px; }
+.toc a { color: #3b82d4; text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+hr { border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>BAMOE TCK Dashboard — How It Works</h1>
+<p class="subtitle">A plain-English guide to every file, every step, and every decision behind the automated Drools compatibility dashboard.</p>
+
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#what">What is this dashboard and why does it exist?</a></li>
+    <li><a href="#pieces">The moving pieces — what files do what</a></li>
+    <li><a href="#workflow">The CI workflow step by step</a></li>
+    <li><a href="#python">The dashboard generator (Python script) explained</a></li>
+    <li><a href="#baseline">The baseline concept — pre-existing vs new failures</a></li>
+    <li><a href="#sync">The sync-before-test trick</a></li>
+    <li><a href="#data">Where results are stored</a></li>
+    <li><a href="#pages">How the website gets published</a></li>
+    <li><a href="#triggers">How and when everything runs automatically</a></li>
+    <li><a href="#manual">How to trigger things manually</a></li>
+  </ol>
+</div>
+
+
+<h2 id="what">1. What is this dashboard and why does it exist?</h2>
+
+<p>
+  The <strong>DMN TCK</strong> (Decision Model and Notation Technology Compatibility Kit) is a public test suite
+  maintained at <code>github.com/dmn-tck/tck</code>. It contains thousands of test cases that check whether
+  a DMN engine correctly implements the specification. Various contributors open Pull Requests (PRs) to that
+  repository adding new test cases.
+</p>
+
+<p>
+  Our engine is <strong>Apache KIE Drools 999-SNAPSHOT</strong> (the in-development next version).
+  The question we need to answer continuously is:
+</p>
+
+<div class="callout">
+  <strong>For every open PR in the upstream TCK repo — if that PR were merged today, how many of its new
+  test cases would Drools pass or fail?</strong>
+</div>
+
+<p>
+  Answering this manually would require a developer to check out each PR, build Drools from source, run
+  the tests, and interpret the results. The dashboard automates all of that and presents the answer as
+  a web page that refreshes itself daily.
+</p>
+
+<p>The live dashboard is at: <code>https://athirahari77.github.io/tck/drools-dashboard.html</code></p>
+
+
+<h2 id="pieces">2. The moving pieces — what files do what</h2>
+
+<table>
+  <thead><tr><th>File</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>.github/workflows/pr-test.yml</code></td>
+      <td>The main automation. Runs on GitHub's servers. Polls for open PRs, builds Drools, runs tests, saves results, and regenerates the dashboard HTML.</td>
+    </tr>
+    <tr>
+      <td><code>.github/workflows/sync-upstream.yml</code></td>
+      <td>Every day, pulls the latest changes from the upstream <code>dmn-tck/tck</code> master branch into our fork. This keeps our copy of the test cases up to date.</td>
+    </tr>
+    <tr>
+      <td><code>scripts/generate_dashboard.py</code></td>
+      <td>A Python script that reads the saved test results and produces the HTML dashboard page. It is not a web server — it runs once, produces one HTML file, then exits.</td>
+    </tr>
+    <tr>
+      <td><code>TestResults/Drools/999-SNAPSHOT/tck_results.csv</code></td>
+      <td>The <strong>baseline</strong> — a CSV file recording which tests fail on master <em>before</em> any PR is applied. This is the reference point for deciding whether a PR introduces new failures.</td>
+    </tr>
+    <tr>
+      <td><code>pr-results/&lt;PR_NUMBER&gt;/tck_results.csv</code></td>
+      <td>The test results for a specific PR. One folder per PR. Created by CI after running the tests against that PR's code.</td>
+    </tr>
+    <tr>
+      <td><code>pr-results/&lt;PR_NUMBER&gt;/meta.json</code></td>
+      <td>Metadata about a PR test run: when it ran, which Drools commit was used, pass/fail counts, and whether there was a merge conflict.</td>
+    </tr>
+    <tr>
+      <td><code>docs/drools-dashboard.html</code></td>
+      <td>The output file that gets served as the website. Generated by the Python script. Never edited by hand.</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<h2 id="workflow">3. The CI workflow step by step</h2>
+
+<div class="file-label">.github/workflows/pr-test.yml</div>
+
+<p>This workflow is the heart of the system. Here is what it does, one step at a time.</p>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <strong>Check out our repository</strong>
+    <p>GitHub's CI server starts with a blank machine. This step downloads the <code>tck_dashboard</code>
+    branch of our fork onto that machine so subsequent steps can read and write files.</p>
+    <p>The <code>fetch-depth: 0</code> setting means it downloads the full git history, not just the
+    latest commit. This is needed so that the final <code>git push</code> back to <code>tck_dashboard</code>
+    works reliably — shallow clones can cause push rejections when the remote has moved ahead. The branch
+    merging happens inside the throwaway upstream clones (step 7), not here.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <strong>Decide what to do (run mode)</strong>
+    <p>The workflow can be triggered in three different ways and needs to behave differently for each:</p>
+    <ul>
+      <li><strong>Scheduled (automatic, daily at 2am UTC):</strong> Ask the GitHub API for all open PRs in
+      the upstream TCK repo. Test any PR that either has no saved results yet, <em>or</em> whose current
+      head SHA on GitHub differs from the SHA stored in its <code>meta.json</code> — meaning the author
+      has pushed new commits since the last test run.</li>
+      <li><strong>Push (automatic, when test cases change):</strong> Re-test <em>all</em> open PRs because
+      the master test cases have changed and old results might now be stale.</li>
+      <li><strong>Manual (you click "Run workflow" on GitHub):</strong> Either test one specific PR
+      number you type in, test all open PRs, or just regenerate the dashboard HTML from existing saved
+      results without running any tests.</li>
+    </ul>
+    <p>The result of this step is a variable called <code>pr_list</code> — a space-separated list of
+    PR numbers to test (e.g. <code>717 720 737</code>), and a flag <code>should_test</code> that is
+    either <code>true</code> or <code>false</code>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <strong>Set up Java 17</strong>
+    <p>Drools is a Java project. The CI machine starts with no Java installed. This step installs
+    Java 17 (Temurin distribution) so Maven can compile and run Drools. This step is skipped entirely
+    if there are no PRs to test.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <strong>Find the current Drools source commit</strong>
+    <p>We ask the Drools GitHub repository: "what is your latest commit hash?" and save the first
+    12 characters of it (e.g. <code>456693c0d18c</code>). This is used as a cache key in the next step
+    and also saved in <code>meta.json</code> so we know exactly which version of Drools produced the
+    test results.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <strong>Cache the Maven download folder</strong>
+    <p>Building Drools requires downloading hundreds of Java library files from the internet. This takes
+    several minutes. The cache step saves those files between CI runs so they only need to be downloaded
+    once per Drools commit. If Drools hasn't changed since last time, the cache is reused and this step
+    is nearly instant.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">6</div>
+  <div class="step-body">
+    <strong>Build Drools from source</strong>
+    <p>This is the most time-consuming step. It clones the full Drools source code from
+    <code>apache/incubator-kie-drools</code> and compiles it.</p>
+
+    <p>An important nuance: we do <em>not</em> build the entire Drools repository. The full build fails
+    in CI because some modules depend on a separate repository (<code>incubator-kie-kogito-runtimes</code>)
+    that isn't available. Instead we build only the two modules the TCK runner needs:</p>
+    <pre>-pl kie-dmn/kie-dmn-api,kie-dmn/kie-dmn-core -am</pre>
+    <p>The <code>-pl</code> flag means "project list" — only build these modules.
+    The <code>-am</code> flag means "also make" — also build everything these modules depend on.
+    The result is installed into the local Maven cache (<code>~/.m2</code>) as
+    <code>kie-dmn-core-999-SNAPSHOT.jar</code>, which the TCK runner will pick up automatically.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">7</div>
+  <div class="step-body">
+    <strong>Test each PR in an isolated workspace</strong>
+    <p>This is the core logic. For each PR number in the list, the following happens:</p>
+
+    <p><strong>a) Clone the upstream TCK repo into a temporary folder.</strong> We download a fresh copy
+    of <code>dmn-tck/tck</code> into a folder named <code>upstream-tck-pr-717</code> (using the PR number).
+    This is completely separate from our own repository.</p>
+
+    <p><strong>b) Fetch the PR's code into that clone.</strong> Every open PR on GitHub has a special
+    reference available at <code>pull/717/head</code>. We download just that branch into our temp clone.
+    This is the proposed change — the new test cases the PR author wants to add.</p>
+
+    <p><strong>c) Check out the PR branch and merge master into it locally.</strong> Here is a key design
+    decision: a PR branch might be days or weeks out of date with master. If we test it as-is, it might
+    fail tests that have nothing to do with the PR — they fail only because the branch is stale. To avoid
+    this noise, we do a local <code>git merge master</code> inside the temp folder. This simulates "what
+    would happen if the PR author synced their branch today." Crucially, this merge only exists inside the
+    throwaway temp folder — it is never pushed anywhere and never affects the PR author's branch. If the
+    merge has conflicts (rare for test-only PRs), we skip the merge and note <code>merge_conflict: true</code>
+    in the results.</p>
+
+    <p><strong>d) Run the TCK test runner.</strong> We run <code>mvn verify -Pdrools</code> inside the
+    temp clone. Maven finds the <code>kie-dmn-core-999-SNAPSHOT.jar</code> we built in step 6, and runs
+    all the test cases against it. The results are written to a CSV file inside the temp folder.</p>
+
+    <p><strong>e) Copy the results back and delete the temp folder.</strong> We copy just the CSV file
+    into <code>pr-results/717/tck_results.csv</code> in our own repository, then delete the entire temp
+    folder. Nothing from the upstream PR permanently enters our repository — only the test result numbers.</p>
+
+    <p>Pass/fail counts are computed by inspecting column 4 of each CSV row (the status field) using
+    <code>awk</code>, not a full-line text search. This prevents a Java exception message in the fifth
+    column from accidentally inflating the counts. The CSV has no header row, so the total line count
+    equals the total test-case count exactly.</p>
+
+    <p>We also write a <code>meta.json</code> file recording: the PR number, title, run date, Drools
+    commit SHA, head SHA, total/pass/fail counts, how many commits behind master the PR was, and whether
+    we had a merge conflict.</p>
+
+    <p><strong>f) Commit and push after each PR.</strong> Results are saved to git immediately after each
+    PR finishes rather than waiting until the entire loop is done. This means a timeout or runner failure
+    mid-loop only loses the in-progress PR, not every PR tested so far. Each push uses a rebase-retry
+    loop (up to 3 attempts) to handle the case where the remote has moved ahead — for example because
+    a queued run's push landed while this run was mid-loop.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">8</div>
+  <div class="step-body">
+    <strong>Set up Python</strong>
+    <p>The dashboard generator is written in Python. This step installs Python 3.11 and the
+    <code>requests</code> library (used to call the GitHub API to fetch PR details).</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">9</div>
+  <div class="step-body">
+    <strong>Generate the dashboard HTML</strong>
+    <p>Runs the Python script <code>scripts/generate_dashboard.py</code> which reads all the saved
+    results and produces a single HTML file at <code>docs/drools-dashboard.html</code>. This step
+    <em>always</em> runs regardless of whether any testing happened — even a "refresh only" run
+    regenerates the page.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">10</div>
+  <div class="step-body">
+    <strong>Commit and push dashboard HTML</strong>
+    <p>After all PRs have been tested (and their individual results already committed per step 7f),
+    this step commits and pushes the regenerated <code>docs/drools-dashboard.html</code>. GitHub
+    Pages then serves the <code>docs/</code> folder as a website automatically, usually within a
+    minute or two of the push.</p>
+  </div>
+</div>
+
+
+<h2 id="python">4. The dashboard generator (Python script) explained</h2>
+
+<div class="file-label">scripts/generate_dashboard.py</div>
+
+<p>This script reads data from disk and from the GitHub API, then produces one HTML file. It is split into several logical sections.</p>
+
+<h3>GitHub API functions</h3>
+<p><code>fetch_prs()</code> — calls the GitHub API to get the list of currently open PRs from
+<code>dmn-tck/tck</code>. Returns a list of PR objects containing title, author, number, URL, and dates.</p>
+<p><code>fetch_pr_files()</code> — for each PR, asks GitHub which files that PR changes. This is used to
+show which test suites a PR touches (e.g. "this PR adds files in <code>1157-implicit-conversions/</code>").</p>
+<p><code>pr_new_suites()</code> — filters the file list to only <code>TestCases/compliance-level-*/</code>
+paths and extracts the suite folder name. So if a PR touches
+<code>TestCases/compliance-level-3/0720-imports/</code> it returns <code>{"0720-imports"}</code>.</p>
+
+<h3>CSV parsing</h3>
+<p><code>parse_csv()</code> — reads a <code>tck_results.csv</code> file. Each row has: suite path,
+test name, case ID, status (SUCCESS or ERROR), and failure message. The function returns three things:</p>
+<ul>
+  <li>A dictionary of suite names → pass/fail counts (used for the bar charts)</li>
+  <li>A list of all failures with their details</li>
+  <li>A summary with total/pass/fail numbers</li>
+</ul>
+<p>Each failure gets a unique <strong>key</strong> in the format <code>suite_path::case_id</code>
+(e.g. <code>compliance-level-3/0068-feel-equality::range_010</code>). This key is how we track
+"is this the same failure across different runs?"</p>
+
+<h3>Baseline loading and failure splitting</h3>
+<p><code>load_baseline()</code> — reads the baseline CSV and returns a Python <code>set</code>
+containing all failure keys. A set is like a list but makes it extremely fast to ask "is this key
+in here?" for thousands of items.</p>
+<p><code>split_failures()</code> — given a list of failures from a PR test run, splits them into two
+groups: failures whose key <em>is</em> in the baseline set (pre-existing) and failures whose key
+<em>is not</em> in the baseline set (new, introduced by the PR).</p>
+
+<h3>Loading PR results from disk</h3>
+<p><code>load_pr_results()</code> — scans the <code>pr-results/</code> directory. For each numbered
+subfolder it finds, it loads the <code>tck_results.csv</code> and <code>meta.json</code>. Returns a
+dictionary mapping PR number → results data.</p>
+
+<h3>Visualisation helpers</h3>
+<p><code>_donut_svg()</code> — generates a circular donut chart as an SVG image (pure maths —
+no external charting library needed). It calculates the arc lengths using the circumference of a
+circle and <code>stroke-dasharray</code> to draw the green (pass) and red (fail) segments.</p>
+<p><code>_level_bars()</code> / <code>level_bar_rows</code> — generates horizontal bar charts showing
+pass rates per compliance level and per failing suite. Each bar is a <code>div</code> with a
+percentage width and a colour (green = 100%, amber = mostly passing, red = mostly failing).</p>
+
+<h3>PR status table</h3>
+<p><code>_pr_status_table()</code> — builds the main PR table. For each open PR it produces one row with:</p>
+<ul>
+  <li>The PR number and a link to it on GitHub</li>
+  <li>The title, author, and last-updated date</li>
+  <li>Which test suites the PR touches (purple badges)</li>
+  <li>The result: <span class="badge b-red">✗ N new failures</span> or
+    <span class="badge b-amber">N pre-existing only</span> or
+    <span class="badge b-green">✓ all pass</span> or
+    <span class="badge b-gray">not tested</span></li>
+  <li>The pass rate (e.g. "3,396 / 3,403 (99%)")</li>
+</ul>
+<p>A coloured left border stripe is added to each row via CSS to make the status visible at a glance.</p>
+
+<h3>Net-new failures drill-down</h3>
+<p><code>_new_failures_drilldown()</code> — for every PR that has new failures, produces a detailed
+table showing each individual failing test case: which compliance level, which suite, which case ID,
+the test name, and the failure message. Pre-existing failures are completely excluded from this section —
+they are only noted as a count ("3 pre-existing failures excluded from this list"). This section is
+hidden entirely if no PR has new failures.</p>
+
+<h3>Baseline table</h3>
+<p><code>_baseline_table()</code> — a simple table listing all failures that exist on upstream master
+before any PR is applied. These are known Drools issues that we are aware of and that should not be
+blamed on any PR.</p>
+
+<h3>Main build function</h3>
+<p><code>build_dashboard()</code> — ties everything together. It loads all the data, computes the metrics,
+calls all the helper functions to produce HTML fragments, assembles them into a complete HTML document, and
+writes the file to disk. The resulting file is entirely self-contained — no external CSS or JavaScript
+libraries, no internet connection needed to view it.</p>
+
+
+<h2 id="baseline">5. The baseline concept — pre-existing vs new failures</h2>
+
+<p>This is the most important concept in the whole system. Without it, every PR would appear to fail
+dozens of tests — not because the PR is bad, but because Drools already has known failures on master.</p>
+
+<div class="callout">
+  <strong>Analogy:</strong> Imagine a car that already has a broken radio before you take it to the
+  mechanic to fix the brakes. After the mechanic returns the car, the radio is still broken. You would
+  not blame the mechanic for the radio — it was broken before they touched it. The baseline is our way
+  of recording "the radio was already broken before any PR touched anything."
+</div>
+
+<p>The baseline CSV (<code>TestResults/Drools/999-SNAPSHOT/tck_results.csv</code>) was produced by running
+the full TCK test suite against Drools 999-SNAPSHOT on the current master branch, with no PR applied.
+It recorded 3 failures:</p>
+<ul>
+  <li><code>0068-feel-equality</code> — 2 failures (FEEL equality edge cases)</li>
+  <li><code>0085-decision-services</code> — 1 failure (decision service result comparison)</li>
+</ul>
+
+<p>When we test a PR and it shows those same 3 failures, we know the PR did not cause them. When a PR
+shows additional failures not in that list, those are genuinely introduced by the PR's new test cases
+that Drools cannot yet pass.</p>
+
+<div class="callout warn">
+  <strong>Important:</strong> The baseline CSV must only contain results from running against upstream
+  master with no local modifications. If you run tests locally with a PR's test cases applied and then
+  commit that CSV, the baseline becomes polluted with PR-specific failures and the classification breaks.
+  This happened once during development and was fixed by removing the contaminating rows.
+</div>
+
+
+<h2 id="sync">6. The sync-before-test trick</h2>
+
+<p>Many PR branches in the upstream TCK repo are weeks or months out of date with master. If we test them
+as-is, we see failures that have nothing to do with the PR — they exist only because the branch hasn't
+picked up recent changes to master.</p>
+
+<div class="callout">
+  <strong>Analogy:</strong> Imagine someone wrote a book chapter six months ago. Since then, other chapters
+  have been edited and the chapter numbering changed. If you proofread their chapter today without applying
+  those edits first, you'd find chapter-number errors that are not their fault.
+</div>
+
+<p>Our solution: before running tests, we do a local <code>git merge master</code> inside the throwaway
+temp folder. This means we test "the PR's changes on top of the current master" — which is what would
+actually happen if the PR were merged today.</p>
+
+<p>This is completely safe because:</p>
+<ul>
+  <li>The merge only exists inside a temporary folder that is deleted immediately after copying the results out</li>
+  <li>Nothing is ever pushed to the PR author's branch — their GitHub PR is completely untouched</li>
+  <li>If the merge has a conflict (two people edited the same file), we abort the merge and test the
+  raw branch instead, flagging it as <code>merge_conflict: true</code> in the metadata</li>
+</ul>
+<p>The footnote on the dashboard reads: <em>"Results tested as if each PR branch were synced with master
+(local merge before run) — failures shown are genuine conflicts introduced by the PR, not stale-branch noise."</em></p>
+
+
+<h2 id="data">7. Where results are stored</h2>
+
+<p>All results are stored as regular files in the git repository itself. There is no separate database.</p>
+
+<pre>pr-results/
+  717/
+    tck_results.csv   ← one row per test, each row is pass or fail
+    meta.json         ← metadata about the run
+  720/
+    tck_results.csv
+    meta.json
+  ...
+
+TestResults/Drools/999-SNAPSHOT/
+  tck_results.csv     ← the baseline (master, no PRs applied)</pre>
+
+<p>The <code>meta.json</code> for each PR looks like this:</p>
+<pre>{
+  "pr_number": 717,
+  "pr_title": "Add tests for implicit conversions in Decisions, BKMs and DSs.",
+  "run_date": "2026-09-09T13:59:42Z",
+  "drools_sha": "456693c0d18c",
+  "head_sha": "a3f8c12d9e4b7f20c1d6e8a91b3c5f7d2e4a6b8c",
+  "total": 3403,
+  "pass": 3396,
+  "fail": 7,
+  "behind_by": 39,
+  "sync_status": "diverged",
+  "tested_as_synced": true,
+  "merge_conflict": false
+}</pre>
+
+<table>
+  <thead><tr><th>Field</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td><code>run_date</code></td><td>When CI ran this test</td></tr>
+    <tr><td><code>drools_sha</code></td><td>The exact Drools commit that was built and tested against</td></tr>
+    <tr><td><code>head_sha</code></td><td>The PR's head commit SHA at the time of testing. The schedule trigger compares this against the live GitHub value to detect whether the author has pushed new commits since the last run.</td></tr>
+    <tr><td><code>total</code></td><td>Total number of test cases run</td></tr>
+    <tr><td><code>pass / fail</code></td><td>How many passed and failed</td></tr>
+    <tr><td><code>behind_by</code></td><td>How many master commits the PR branch had NOT yet incorporated (before our local merge)</td></tr>
+    <tr><td><code>sync_status</code></td><td>GitHub's description: identical / ahead / behind / diverged</td></tr>
+    <tr><td><code>tested_as_synced</code></td><td>true = master was merged in before testing; false = merge had conflicts</td></tr>
+    <tr><td><code>merge_conflict</code></td><td>true = there were git conflicts when we tried to merge master</td></tr>
+  </tbody>
+</table>
+
+
+<h2 id="pages">8. How the website gets published</h2>
+
+<p>GitHub Pages is a free website hosting service built into every GitHub repository. When enabled,
+it serves the contents of a specific folder as a public website.</p>
+
+<p>In our setup, GitHub Pages is configured to serve the <code>docs/</code> folder of the
+<code>tck_dashboard</code> branch. Every time CI commits a new <code>docs/drools-dashboard.html</code>
+file and pushes it to that branch, GitHub automatically re-deploys the website within a few minutes.
+No web server to manage, no hosting costs.</p>
+
+<p>The URL is: <code>https://athirahari77.github.io/tck/drools-dashboard.html</code></p>
+
+
+<h2 id="triggers">9. How and when everything runs automatically</h2>
+
+<table>
+  <thead><tr><th>Trigger</th><th>When</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Daily schedule</td>
+      <td>Every day at 2:00am UTC</td>
+      <td>Check upstream for open PRs. Test any PR that is new (no <code>meta.json</code> yet) <em>or</em> whose head SHA has changed since the last run (author pushed new commits). Regenerate dashboard.</td>
+    </tr>
+    <tr>
+      <td>Push to tck_dashboard (TestCases or runners changed)</td>
+      <td>Whenever <code>sync-upstream.yml</code> pulls in new commits from upstream master</td>
+      <td>Re-test all open PRs against the updated test cases. Regenerate dashboard.</td>
+    </tr>
+    <tr>
+      <td>Sync upstream workflow</td>
+      <td>Daily (separate schedule)</td>
+      <td>Pulls new commits from <code>dmn-tck/tck</code> master into our fork. If test cases changed, this triggers the push trigger above.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The chain works like this:</p>
+<ol>
+  <li>Someone merges a PR in the upstream TCK repo, adding new test cases to master</li>
+  <li>Our daily sync workflow picks up those changes and pushes them to <code>tck_dashboard</code></li>
+  <li>That push triggers <code>pr-test.yml</code> because files under <code>TestCases/</code> changed</li>
+  <li>All open PRs get re-tested against the new master state</li>
+  <li>Dashboard is regenerated and published</li>
+</ol>
+
+
+<h2 id="manual">10. How to trigger things manually</h2>
+
+<p>Go to: <code>https://github.com/AthiraHari77/tck/actions/workflows/pr-test.yml</code></p>
+<p>Click <strong>Run workflow</strong>. The input field accepts:</p>
+
+<table>
+  <thead><tr><th>Input</th><th>What it does</th><th>How long it takes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Leave blank</td>
+      <td>Only regenerates the dashboard HTML from already-saved results. No testing.</td>
+      <td>~1 minute</td>
+    </tr>
+    <tr>
+      <td>A PR number (e.g. <code>717</code>)</td>
+      <td>Builds Drools and runs tests for that specific PR only. Saves results and regenerates dashboard.</td>
+      <td>~30–45 minutes</td>
+    </tr>
+    <tr>
+      <td><code>all</code></td>
+      <td>Builds Drools and runs tests for every currently open upstream PR. Saves results and regenerates dashboard.</td>
+      <td>~1–3 hours depending on number of open PRs</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+<p style="font-size:12px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:14px;margin-top:4px">
+  BAMOE TCK Dashboard documentation  ·  Made with IBM Bob
+</p>
+
+</div>
+</body>
+</html>
