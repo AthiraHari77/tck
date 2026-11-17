@@ -1,4 +1,4 @@
-name: "BAMOE TCK Dashboard — Sync, Baseline & Refresh"
+name: "TCK Dashboard — Sync, Baseline & Refresh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WHAT THIS WORKFLOW DOES
@@ -123,26 +123,8 @@ jobs:
             echo "Mode: all open PRs = '$PR_LIST'"
           fi
 
-      # ── 4. Restore baseline CSV from cache ────────────────────────────────
-      - name: Restore baseline CSV from cache
-        id: cache-baseline
-        uses: actions/cache/restore@v4
-        with:
-          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
-          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
-          restore-keys: baseline-drools-
-
-      # ── 5. Set up Java 17 ─────────────────────────────────────────────────
-      - name: Set up JDK 17
-        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # ── 6. Get Drools HEAD SHA (Maven cache key) ───────────────────────────
+      # ── 4. Get Drools HEAD SHA (Maven & Baseline cache key) ────────────────
       - name: Get Drools HEAD SHA
-        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
         id: drools-sha
         run: |
           set -eo pipefail
@@ -151,6 +133,22 @@ jobs:
           echo "sha=$SHA"        >> "$GITHUB_OUTPUT"
           echo "DROOLS_SHA=$SHA" >> "$GITHUB_ENV"
           echo "Drools HEAD SHA: $SHA"
+
+      # ── 5. Restore baseline CSV from cache ────────────────────────────────
+      - name: Restore baseline CSV from cache
+        id: cache-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}-${{ steps.drools-sha.outputs.sha }}
+
+      # ── 6. Set up Java 17 ─────────────────────────────────────────────────
+      - name: Set up JDK 17
+        if: steps.cache-baseline.outputs.cache-hit != 'true' || steps.mode.outputs.should_test == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
       # ── 7. Cache Maven ~/.m2 ──────────────────────────────────────────────
       - name: Cache Maven repository
@@ -201,7 +199,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
-          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}
+          key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}-${{ steps.drools-sha.outputs.sha }}
 
       # ── 10. Test each open PR (always fresh, never committed) ──────────────
       - name: Test each PR in isolated workspace
@@ -223,8 +221,8 @@ jobs:
               https://github.com/dmn-tck/tck.git "$WORK_DIR"
 
             cd "$WORK_DIR"
-            git config user.email "ci@bamoe-dashboard.local"
-            git config user.name  "BAMOE CI"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name  "github-actions[bot]"
 
             # ── b) Fetch the PR's branch from public upstream ─────────────────
             git fetch origin "pull/${PR}/head:pr-${PR}" || {
@@ -237,16 +235,27 @@ jobs:
             # ── c) Checkout PR branch and locally merge master ────────────────
             git checkout "pr-${PR}"
             local MERGE_CONFLICT=false
-            local MERGE_OUT MERGE_EXIT
-            MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1)
-            MERGE_EXIT=$?
+            local MERGE_OUT MERGE_EXIT=0
+            MERGE_OUT=$(git merge master --no-edit --no-ff 2>&1) || MERGE_EXIT=$?
             if echo "$MERGE_OUT" | grep -q "CONFLICT" || [ "$MERGE_EXIT" -ne 0 ]; then
-              echo "WARNING: PR #${PR} — merge conflict, testing unmerged branch"
+              # Results from an unmerged branch are not comparable to the master
+              # baseline, so do not run tests; record the conflict only.
+              echo "WARNING: PR #${PR} — merge conflict with master, skipping tests"
               git merge --abort 2>/dev/null || true
-              MERGE_CONFLICT=true
-            else
-              echo "PR #${PR} — local merge of master succeeded"
+              cd "$WORKSPACE"
+              mkdir -p "${WORKSPACE}/pr-results/${PR}"
+              cat > "${WORKSPACE}/pr-results/${PR}/meta.json" << EOF
+          {
+            "pr": ${PR},
+            "run_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "merge_conflict": true,
+            "skipped": true
+          }
+          EOF
+              rm -rf "$WORK_DIR"
+              return 0
             fi
+            echo "PR #${PR} — local merge of master succeeded"
             cd "$WORKSPACE"
 
             # ── d) Run TCK runner inside the temp clone ───────────────────────
@@ -259,14 +268,17 @@ jobs:
             cd "$WORKSPACE"
 
             # ── e) Copy results back, discard temp clone ──────────────────────
+            echo "--- TestResults/Drools contents after run (PR #${PR}) ---"
+            find "${WORK_DIR}/TestResults/Drools" -type f | sort || true
+            echo "---"
+
             local RUN_DATE
             RUN_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             mkdir -p "${WORKSPACE}/pr-results/${PR}"
 
-            local RESULT_CSV
-            RESULT_CSV=$(find "${WORK_DIR}/TestResults/Drools" -name "tck_results.csv" | head -1)
-            if [ -z "$RESULT_CSV" ]; then
-              echo "WARNING: No tck_results.csv for PR #${PR} — skipping"
+            local RESULT_CSV="${WORK_DIR}/TestResults/Drools/999-SNAPSHOT/tck_results.csv"
+            if [ ! -f "$RESULT_CSV" ]; then
+              echo "WARNING: 999-SNAPSHOT/tck_results.csv not found for PR #${PR} — skipping"
               rm -rf "$WORK_DIR"
               return 0
             fi
