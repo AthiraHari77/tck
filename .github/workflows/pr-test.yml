@@ -141,9 +141,6 @@ jobs:
         with:
           path: TestResults/Drools/999-SNAPSHOT/tck_results.csv
           key: baseline-drools-${{ steps.sync.outputs.upstream_sha }}-${{ steps.drools-sha.outputs.sha }}
-          restore-keys: |
-            baseline-drools-${{ steps.sync.outputs.upstream_sha }}-
-            baseline-drools-
 
       # ── 6. Set up Java 17 ─────────────────────────────────────────────────
       - name: Set up JDK 17
